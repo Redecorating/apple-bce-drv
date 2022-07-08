@@ -153,6 +153,8 @@ int bce_reserve_submission(struct bce_queue_sq *sq, unsigned long *timeout)
     return 0;
 }
 
+EXPORT_SYMBOL_GPL(bce_reserve_submission);
+
 void bce_cancel_submission_reservation(struct bce_queue_sq *sq)
 {
     atomic_inc(&sq->available_commands);
@@ -165,11 +167,15 @@ void *bce_next_submission(struct bce_queue_sq *sq)
     return ret;
 }
 
+EXPORT_SYMBOL_GPL(bce_next_submission);
+
 void bce_submit_to_device(struct bce_queue_sq *sq)
 {
     mb();
     iowrite32(sq->tail, (u32 *) ((u8 *) sq->reg_mem_dma +  REG_DOORBELL_BASE) + sq->qid);
 }
+
+EXPORT_SYMBOL_GPL(bce_submit_to_device);
 
 void bce_notify_submission_complete(struct bce_queue_sq *sq)
 {
@@ -180,12 +186,16 @@ void bce_notify_submission_complete(struct bce_queue_sq *sq)
     }
 }
 
+EXPORT_SYMBOL_GPL(bce_notify_submission_complete);
+
 void bce_set_submission_single(struct bce_qe_submission *element, dma_addr_t addr, size_t size)
 {
     element->addr = addr;
     element->length = size;
     element->segl_addr = element->segl_length = 0;
 }
+
+EXPORT_SYMBOL_GPL(bce_set_submission_single);
 
 static void bce_cmdq_completion(struct bce_queue_sq *q);
 
@@ -336,6 +346,8 @@ struct bce_queue_cq *bce_create_cq(struct apple_bce_device *dev, u32 el_count)
     return cq;
 }
 
+EXPORT_SYMBOL_GPL(bce_create_cq);
+
 struct bce_queue_sq *bce_create_sq(struct apple_bce_device *dev, struct bce_queue_cq *cq, const char *name, u32 el_count,
         int direction, bce_sq_completion compl, void *userdata)
 {
@@ -367,6 +379,8 @@ struct bce_queue_sq *bce_create_sq(struct apple_bce_device *dev, struct bce_queu
     return sq;
 }
 
+EXPORT_SYMBOL_GPL(bce_create_sq);
+
 void bce_destroy_cq(struct apple_bce_device *dev, struct bce_queue_cq *cq)
 {
     if (!dev->is_being_removed && bce_cmd_unregister_memory_queue(dev->cmd_cmdq, (u16) cq->qid))
@@ -388,3 +402,5 @@ void bce_destroy_sq(struct apple_bce_device *dev, struct bce_queue_sq *sq)
     ida_simple_remove(&dev->queue_ida, (uint) sq->qid);
     bce_free_sq(dev, sq);
 }
+
+EXPORT_SYMBOL_GPL(bce_destroy_sq);

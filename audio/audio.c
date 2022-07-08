@@ -691,3 +691,10 @@ module_param_named(index, aaudio_alsa_index, int, 0444);
 MODULE_PARM_DESC(index, "Index value for Apple Internal Audio soundcard.");
 module_param_named(id, aaudio_alsa_id, charp, 0444);
 MODULE_PARM_DESC(id, "ID string for Apple Internal Audio soundcard.");
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("MrARM");
+MODULE_DESCRIPTION("Apple BCE Audio Driver");
+MODULE_VERSION("0.01");
+module_init(aaudio_module_init);
+module_exit(aaudio_module_exit);
