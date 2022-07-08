@@ -496,7 +496,8 @@ static int bce_vhci_drop_endpoint(struct usb_hcd *hcd, struct usb_device *udev, 
     }
 
     bce_vhci_cmd_endpoint_destroy(&vhci->cq, devid, (u8) (endp->desc.bEndpointAddress & 0x8Fu));
-    vhci->devices[devid]->tq_mask &= ~BIT(endp_index);
+    if (vdev)
+        vdev->tq_mask &= ~BIT(endp_index);
     bce_vhci_destroy_transfer_queue(vhci, q);
     return 0;
 }
