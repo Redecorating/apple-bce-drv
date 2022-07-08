@@ -629,6 +629,8 @@ static struct pci_device_id aaudio_ids[  ] = {
         { 0, },
 };
 
+MODULE_DEVICE_TABLE(pci, aaudio_ids);
+
 struct dev_pm_ops aaudio_pci_driver_pm = {
         .suspend = aaudio_suspend,
         .resume = aaudio_resume
