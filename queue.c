@@ -20,6 +20,8 @@ struct bce_queue_cq *bce_alloc_cq(struct apple_bce_device *dev, int qid, u32 el_
     return q;
 }
 
+EXPORT_SYMBOL_GPL(bce_alloc_cq);
+
 void bce_get_cq_memcfg(struct bce_queue_cq *cq, struct bce_queue_memcfg *cfg)
 {
     cfg->qid = (u16) cq->qid;
@@ -159,6 +161,7 @@ void bce_cancel_submission_reservation(struct bce_queue_sq *sq)
 {
     atomic_inc(&sq->available_commands);
 }
+EXPORT_SYMBOL_GPL(bce_cancel_submission_reservation);
 
 void *bce_next_submission(struct bce_queue_sq *sq)
 {
@@ -324,6 +327,7 @@ u32 bce_cmd_flush_memory_queue(struct bce_queue_cmdq *cmdq, u16 qid)
     return res.status;
 }
 
+EXPORT_SYMBOL_GPL(bce_cmd_flush_memory_queue);
 
 struct bce_queue_cq *bce_create_cq(struct apple_bce_device *dev, u32 el_count)
 {
@@ -391,6 +395,8 @@ void bce_destroy_cq(struct apple_bce_device *dev, struct bce_queue_cq *cq)
     ida_simple_remove(&dev->queue_ida, (uint) cq->qid);
     bce_free_cq(dev, cq);
 }
+
+EXPORT_SYMBOL_GPL(bce_destroy_cq);
 
 void bce_destroy_sq(struct apple_bce_device *dev, struct bce_queue_sq *sq)
 {

@@ -100,8 +100,6 @@ static int apple_bce_probe(struct pci_dev *dev, const struct pci_device_id *id)
 
     global_bce = bce;
 
-    bce_vhci_create(bce, &bce->vhci);
-
     return 0;
 
 fail_ts:
@@ -239,8 +237,6 @@ static void apple_bce_remove(struct pci_dev *dev)
 {
     struct apple_bce_device *bce = pci_get_drvdata(dev);
     bce->is_being_removed = true;
-
-    bce_vhci_destroy(&bce->vhci);
 
     bce_timestamp_stop(&bce->timestamp);
 #ifndef WITHOUT_NVME_PATCH
@@ -397,10 +393,6 @@ static int __init apple_bce_module_init(void)
         result = PTR_ERR(bce_class);
         goto fail_class;
     }
-    if ((result = bce_vhci_module_init())) {
-        pr_err("apple-bce: bce-vhci init failed");
-        goto fail_class;
-    }
 
     result = pci_register_driver(&apple_bce_pci_driver);
     if (result)
@@ -422,7 +414,6 @@ static void __exit apple_bce_module_exit(void)
 {
     pci_unregister_driver(&apple_bce_pci_driver);
 
-    bce_vhci_module_exit();
     class_destroy(bce_class);
     unregister_chrdev_region(bce_chrdev, 1);
 }

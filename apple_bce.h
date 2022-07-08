@@ -5,7 +5,6 @@
 #include <linux/spinlock.h>
 #include "mailbox.h"
 #include "queue.h"
-#include "vhci/vhci.h"
 
 #define BC_PROTOCOL_VERSION 0x20001
 #define BCE_MAX_QUEUE_COUNT 0x100
@@ -32,8 +31,6 @@ struct apple_bce_device {
     dma_addr_t saved_data_dma_addr;
     void *saved_data_dma_ptr;
     size_t saved_data_dma_size;
-
-    struct bce_vhci vhci;
 };
 
 extern struct apple_bce_device *global_bce;

@@ -11,6 +11,8 @@ static struct class *bce_vhci_class;
 static const struct hc_driver bce_vhci_driver;
 static u16 bce_vhci_port_mask = U16_MAX;
 
+struct bce_vhci *global_vhci;
+
 static int bce_vhci_create_event_queues(struct bce_vhci *vhci);
 static void bce_vhci_destroy_event_queues(struct bce_vhci *vhci);
 static int bce_vhci_create_message_queues(struct bce_vhci *vhci);
@@ -18,16 +20,28 @@ static void bce_vhci_destroy_message_queues(struct bce_vhci *vhci);
 static void bce_vhci_handle_firmware_events_w(struct work_struct *ws);
 static void bce_vhci_firmware_event_completion(struct bce_queue_sq *sq);
 
-int bce_vhci_create(struct apple_bce_device *dev, struct bce_vhci *vhci)
+int bce_vhci_create(void)
 {
+    struct bce_vhci *vhci = NULL;
     int status;
+
+    vhci = kzalloc(sizeof(struct bce_vhci), GFP_KERNEL);
+    if (!vhci) {
+        status = -ENOMEM;
+        goto fail;
+    }
+
+    vhci->dev = global_bce;
+    if (!vhci->dev) {
+        dev_warn(vhci->dev->dev, "bce_vhci: No BCE available\n");
+        status = -EINVAL;
+        goto fail_dev;
+    }
 
     spin_lock_init(&vhci->hcd_spinlock);
 
-    vhci->dev = dev;
-
     vhci->vdevt = bce_vhci_chrdev;
-    vhci->vdev = device_create(bce_vhci_class, dev->dev, vhci->vdevt, NULL, "bce-vhci");
+    vhci->vdev = device_create(bce_vhci_class, vhci->dev->dev, vhci->vdevt, NULL, "bce-vhci");
     if (IS_ERR_OR_NULL(vhci->vdev)) {
         status = PTR_ERR(vhci->vdev);
         goto fail_dev;
@@ -46,7 +60,7 @@ int bce_vhci_create(struct apple_bce_device *dev, struct bce_vhci *vhci)
         status = -ENOMEM;
         goto fail_hcd;
     }
-    vhci->hcd->self.sysdev = &dev->pci->dev;
+    vhci->hcd->self.sysdev = &vhci->dev->pci->dev;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5,4,0)
     vhci->hcd->self.uses_dma = 1;
 #endif
@@ -55,6 +69,8 @@ int bce_vhci_create(struct apple_bce_device *dev, struct bce_vhci *vhci)
 
     if ((status = usb_add_hcd(vhci->hcd, 0, 0)))
         goto fail_hcd;
+
+    global_vhci = vhci;
 
     return 0;
 
@@ -65,6 +81,8 @@ fail_eq:
 fail_mq:
     device_destroy(bce_vhci_class, vhci->vdevt);
 fail_dev:
+    kfree(vhci);
+fail:
     if (!status)
         status = -EINVAL;
     return status;
@@ -735,7 +753,8 @@ int __init bce_vhci_module_init(void)
         result = PTR_ERR(bce_vhci_class);
         goto fail_class;
     }
-    return 0;
+
+    return bce_vhci_create();
 
 fail_class:
     class_destroy(bce_vhci_class);
@@ -747,9 +766,18 @@ fail_chrdev:
 }
 void __exit bce_vhci_module_exit(void)
 {
+    bce_vhci_destroy(global_vhci);
+
     class_destroy(bce_vhci_class);
     unregister_chrdev_region(bce_vhci_chrdev, 1);
 }
 
 module_param_named(vhci_port_mask, bce_vhci_port_mask, ushort, 0444);
 MODULE_PARM_DESC(vhci_port_mask, "Specifies which VHCI ports are enabled");
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("MrARM");
+MODULE_DESCRIPTION("Apple BCE VHCI Driver");
+MODULE_VERSION("0.01");
+module_init(bce_vhci_module_init);
+module_exit(bce_vhci_module_exit);
