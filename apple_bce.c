@@ -423,6 +423,6 @@ static void __exit apple_bce_module_exit(void)
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("MrARM");
 MODULE_DESCRIPTION("Apple BCE Driver");
-MODULE_VERSION("0.01");
+MODULE_VERSION("0.02");
 module_init(apple_bce_module_init);
 module_exit(apple_bce_module_exit);
