@@ -1,12 +1,12 @@
 #include "apple_bce.h"
 #include <linux/module.h>
 #include <linux/crc32.h>
-#include "audio/audio.h"
 
 static dev_t bce_chrdev;
 static struct class *bce_class;
 
 struct apple_bce_device *global_bce;
+EXPORT_SYMBOL_GPL(global_bce);
 
 static int bce_create_command_queues(struct apple_bce_device *bce);
 static void bce_free_command_queues(struct apple_bce_device *bce);
@@ -406,8 +406,6 @@ static int __init apple_bce_module_init(void)
     if (result)
         goto fail_drv;
 
-    aaudio_module_init();
-
     return 0;
 
 fail_drv:
@@ -424,7 +422,6 @@ static void __exit apple_bce_module_exit(void)
 {
     pci_unregister_driver(&apple_bce_pci_driver);
 
-    aaudio_module_exit();
     bce_vhci_module_exit();
     class_destroy(bce_class);
     unregister_chrdev_region(bce_chrdev, 1);
