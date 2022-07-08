@@ -779,6 +779,6 @@ MODULE_PARM_DESC(vhci_port_mask, "Specifies which VHCI ports are enabled");
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("MrARM");
 MODULE_DESCRIPTION("Apple BCE VHCI Driver");
-MODULE_VERSION("0.01");
+MODULE_VERSION("0.02");
 module_init(bce_vhci_module_init);
 module_exit(bce_vhci_module_exit);

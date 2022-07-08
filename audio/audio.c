@@ -697,6 +697,6 @@ MODULE_PARM_DESC(id, "ID string for Apple Internal Audio soundcard.");
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("MrARM");
 MODULE_DESCRIPTION("Apple BCE Audio Driver");
-MODULE_VERSION("0.01");
+MODULE_VERSION("0.02");
 module_init(aaudio_module_init);
 module_exit(aaudio_module_exit);
