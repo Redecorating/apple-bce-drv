@@ -2,7 +2,7 @@ obj-m += apple-bce.o
 obj-m += apple-bce-vhci.o
 obj-m += aaudio.o
 
-apple-bce-objs := apple_bce.o mailbox.o queue.o queue_dma.o
+apple-bce-objs := apple_bce.o mailbox.o queue.o
 apple-bce-vhci-objs := vhci/vhci.o vhci/queue.o vhci/transfer.o
 aaudio-objs := audio/audio.o audio/protocol.o audio/protocol_bce.o audio/pcm.o
 
