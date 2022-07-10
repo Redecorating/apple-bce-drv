@@ -168,6 +168,8 @@ u32 bce_cmd_flush_memory_queue(struct bce_queue_cmdq *cmdq, u16 qid);
 
 /* User API - Creates and registers the queue */
 
+void bce_submit(struct bce_queue_sq *sq, dma_addr_t addr, size_t size);
+
 struct bce_queue_cq *bce_create_cq(struct apple_bce_device *dev, u32 el_count);
 struct bce_queue_sq *bce_create_sq(struct apple_bce_device *dev, struct bce_queue_cq *cq, const char *name, u32 el_count,
         int direction, bce_sq_completion compl, void *userdata);
