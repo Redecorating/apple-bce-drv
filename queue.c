@@ -20,8 +20,6 @@ struct bce_queue_cq *bce_alloc_cq(struct apple_bce_device *dev, int qid, u32 el_
     return q;
 }
 
-EXPORT_SYMBOL_GPL(bce_alloc_cq);
-
 void bce_get_cq_memcfg(struct bce_queue_cq *cq, struct bce_queue_memcfg *cfg)
 {
     cfg->qid = (u16) cq->qid;
