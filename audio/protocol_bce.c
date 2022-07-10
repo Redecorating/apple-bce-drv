@@ -78,13 +78,7 @@ int __aaudio_send_prepare(struct aaudio_bce *b, struct aaudio_send_ctx *ctx, cha
 
 void __aaudio_send(struct aaudio_bce *b, struct aaudio_send_ctx *ctx)
 {
-    struct bce_qe_submission *s = bce_next_submission(b->qout.sq);
-#ifdef DEBUG
-    pr_debug("aaudio: Sending command data\n");
-    print_hex_dump(KERN_DEBUG, "aaudio:OUT ", DUMP_PREFIX_NONE, 32, 1, ctx->msg.data, ctx->msg.size, true);
-#endif
-    bce_set_submission_single(s, b->qout.dma_addr + (dma_addr_t) (ctx->msg.data - b->qout.data), ctx->msg.size);
-    bce_submit_to_device(b->qout.sq);
+	bce_submit(b->qout.sq, b->qout.dma_addr + (dma_addr_t) (ctx->msg.data - b->qout.data), ctx->msg.size);
     b->qout.data_tail = (b->qout.data_tail + 1) % b->qout.el_count;
     spin_unlock_irqrestore(&b->spinlock, ctx->irq_flags);
 }

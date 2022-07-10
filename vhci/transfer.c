@@ -474,7 +474,6 @@ int bce_vhci_urb_request_cancel(struct bce_vhci_transfer_queue *q, struct urb *u
 static int bce_vhci_urb_data_transfer_in(struct bce_vhci_urb *urb, unsigned long *timeout)
 {
     struct bce_vhci_message msg;
-    struct bce_qe_submission *s;
     u32 tr_len;
     int reservation1, reservation2 = -EFAULT;
 
@@ -504,9 +503,7 @@ static int bce_vhci_urb_data_transfer_in(struct bce_vhci_urb *urb, unsigned long
     bce_vhci_message_queue_write(&urb->q->vhci->msg_asynchronous, &msg);
     spin_unlock(&urb->q->vhci->msg_asynchronous_lock);
 
-    s = bce_next_submission(urb->q->sq_in);
-    bce_set_submission_single(s, urb->urb->transfer_dma + urb->send_offset, tr_len);
-    bce_submit_to_device(urb->q->sq_in);
+    bce_submit(urb->q->sq_in, urb->urb->transfer_dma + urb->send_offset, tr_len);
 
     urb->state = BCE_VHCI_URB_WAITING_FOR_COMPLETION;
     return 0;
@@ -527,7 +524,6 @@ static int bce_vhci_urb_data_start(struct bce_vhci_urb *urb, unsigned long *time
 
 static int bce_vhci_urb_send_out_data(struct bce_vhci_urb *urb, dma_addr_t addr, size_t size)
 {
-    struct bce_qe_submission *s;
     unsigned long timeout = 0;
     if (bce_reserve_submission(urb->q->sq_out, &timeout)) {
         pr_err("bce-vhci: Failed to reserve a submission for URB data transfer\n");
@@ -536,9 +532,7 @@ static int bce_vhci_urb_send_out_data(struct bce_vhci_urb *urb, dma_addr_t addr,
 
     pr_debug("bce-vhci: [%02x] DMA to device %llx %lx\n", urb->q->endp_addr, (u64) addr, size);
 
-    s = bce_next_submission(urb->q->sq_out);
-    bce_set_submission_single(s, addr, size);
-    bce_submit_to_device(urb->q->sq_out);
+    bce_submit(urb->q->sq_out, addr, size);
     return 0;
 }
 

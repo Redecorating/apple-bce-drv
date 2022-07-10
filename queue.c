@@ -200,6 +200,15 @@ void bce_set_submission_single(struct bce_qe_submission *element, dma_addr_t add
 
 EXPORT_SYMBOL_GPL(bce_set_submission_single);
 
+void bce_submit(struct bce_queue_sq *sq, dma_addr_t addr, size_t size)
+{
+	struct bce_qe_submission *s = bce_next_submission(sq);
+	bce_set_submission_single(s, addr, size);
+	bce_submit_to_device(sq);
+}
+
+EXPORT_SYMBOL_GPL(bce_submit);
+
 static void bce_cmdq_completion(struct bce_queue_sq *q);
 
 struct bce_queue_cmdq *bce_alloc_cmdq(struct apple_bce_device *dev, int qid, u32 el_count)
