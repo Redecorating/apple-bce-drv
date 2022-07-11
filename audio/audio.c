@@ -600,7 +600,7 @@ void aaudio_handle_cmd_timestamp(struct aaudio_device *a, struct aaudio_msg *msg
     struct aaudio_subdevice *sdev;
     u64 devid, timestamp, update_seed;
     aaudio_msg_read_update_timestamp(msg, &devid, &timestamp, &update_seed);
-    dev_info(a->dev, "Received timestamp update for dev=%llx ts=%llx seed=%llx\n", devid, timestamp, update_seed);
+    dev_dbg(a->dev, "Received timestamp update for dev=%llx ts=%llx seed=%llx\n", devid, timestamp, update_seed);
 
     sdev = aaudio_find_dev_by_dev_id(a, devid);
     aaudio_handle_timestamp(sdev, time_os, timestamp);
