@@ -10,7 +10,6 @@ EXPORT_SYMBOL_GPL(global_bce);
 
 static int bce_create_command_queues(struct apple_bce_device *bce);
 static void bce_free_command_queues(struct apple_bce_device *bce);
-static irqreturn_t bce_handle_mb_irq(int irq, void *dev);
 static irqreturn_t bce_handle_dma_irq(int irq, void *dev);
 static int bce_fw_version_handshake(struct apple_bce_device *bce);
 static int bce_register_command_queue(struct apple_bce_device *bce, struct bce_queue_memcfg *cfg, int is_sq);
@@ -60,14 +59,18 @@ static int apple_bce_probe(struct pci_dev *dev, const struct pci_device_id *id)
         goto fail;
     }
 
-    bce_mailbox_init(&bce->mbox, bce->reg_mem_mb);
     bce_timestamp_init(&bce->timestamp, bce->reg_mem_mb);
 
     spin_lock_init(&bce->queues_lock);
     ida_init(&bce->queue_ida);
 
-    if ((status = pci_request_irq(dev, 0, bce_handle_mb_irq, NULL, dev, "bce_mbox")))
+
+    pr_err("asda\n");
+    if ((status = bce_mailbox_init(bce, bce->reg_mem_mb)))
         goto fail;
+
+    pr_err("asdpa\n");
+
     if ((status = pci_request_irq(dev, 4, NULL, bce_handle_dma_irq, dev, "bce_dma")))
         goto fail_interrupt_0;
 
@@ -110,10 +113,13 @@ fail_dev0:
 #endif
     pci_dev_put(bce->pci0);
 fail_interrupt:
+    pr_err("asd56655a\n");
     pci_free_irq(dev, 4, dev);
 fail_interrupt_0:
-    pci_free_irq(dev, 0, dev);
+    pr_err("asd555a\n");
+    bce_mailbox_exit(&bce->mbox);
 fail:
+    pr_err("asd777a\n");
     if (bce && bce->dev) {
         device_destroy(bce_class, bce->devt);
 
@@ -179,13 +185,6 @@ static void bce_free_command_queues(struct apple_bce_device *bce)
     bce->queues[0] = NULL;
 }
 
-static irqreturn_t bce_handle_mb_irq(int irq, void *dev)
-{
-    struct apple_bce_device *bce = pci_get_drvdata(dev);
-    bce_mailbox_handle_interrupt(&bce->mbox);
-    return IRQ_HANDLED;
-}
-
 static irqreturn_t bce_handle_dma_irq(int irq, void *dev)
 {
     int i;
@@ -200,15 +199,18 @@ static irqreturn_t bce_handle_dma_irq(int irq, void *dev)
 
 static int bce_fw_version_handshake(struct apple_bce_device *bce)
 {
-    u64 result;
+    struct apple_bridge_mbox_msg msg;
     int status;
 
-    if ((status = bce_mailbox_send(&bce->mbox, BCE_MB_MSG(BCE_MB_SET_FW_PROTOCOL_VERSION, BC_PROTOCOL_VERSION),
-            &result)))
+    msg.type = BCE_MB_SET_FW_PROTOCOL_VERSION;
+    msg.value = BC_PROTOCOL_VERSION;
+    status = mbox_send_message(&bce->mbox.chan, (void *)&msg);
+    if (status)
         return status;
-    if (BCE_MB_TYPE(result) != BCE_MB_SET_FW_PROTOCOL_VERSION ||
-        BCE_MB_VALUE(result) != BC_PROTOCOL_VERSION) {
-        pr_err("apple-bce: FW version handshake failed %x:%llx\n", BCE_MB_TYPE(result), BCE_MB_VALUE(result));
+
+    if (msg.type != BCE_MB_SET_FW_PROTOCOL_VERSION ||
+        msg.value != BC_PROTOCOL_VERSION) {
+        pr_err("apple-bce: FW version handshake failed %x:%llx\n", msg.type, msg.value);
         return -EINVAL;
     }
     return 0;
@@ -216,19 +218,23 @@ static int bce_fw_version_handshake(struct apple_bce_device *bce)
 
 static int bce_register_command_queue(struct apple_bce_device *bce, struct bce_queue_memcfg *cfg, int is_sq)
 {
+    struct apple_bridge_mbox_msg msg;
     int status;
-    int cmd_type;
-    u64 result;
     // OS X uses an bidirectional direction, but that's not really needed
     dma_addr_t a = dma_map_single(&bce->pci->dev, cfg, sizeof(struct bce_queue_memcfg), DMA_TO_DEVICE);
     if (dma_mapping_error(&bce->pci->dev, a))
         return -ENOMEM;
-    cmd_type = is_sq ? BCE_MB_REGISTER_COMMAND_SQ : BCE_MB_REGISTER_COMMAND_CQ;
-    status = bce_mailbox_send(&bce->mbox, BCE_MB_MSG(cmd_type, a), &result);
+
+    msg.value = a;
+    msg.type = is_sq ? BCE_MB_REGISTER_COMMAND_SQ : BCE_MB_REGISTER_COMMAND_CQ;
+    status = mbox_send_message(&bce->mbox.chan, (void *)&msg);
+    if (status)
+        return status;
+
     dma_unmap_single(&bce->pci->dev, a, sizeof(struct bce_queue_memcfg), DMA_TO_DEVICE);
     if (status)
         return status;
-    if (BCE_MB_TYPE(result) != BCE_MB_REGISTER_COMMAND_QUEUE_REPLY)
+    if (msg.type != BCE_MB_REGISTER_COMMAND_QUEUE_REPLY)
         return -EINVAL;
     return 0;
 }
@@ -243,7 +249,7 @@ static void apple_bce_remove(struct pci_dev *dev)
     pci_disable_device(bce->pci0);
 #endif
     pci_dev_put(bce->pci0);
-    pci_free_irq(dev, 0, dev);
+    bce_mailbox_exit(&bce->mbox);
     pci_free_irq(dev, 4, dev);
     bce_free_command_queues(bce);
     pci_iounmap(dev, bce->reg_mem_mb);
@@ -257,8 +263,8 @@ static void apple_bce_remove(struct pci_dev *dev)
 
 static int bce_save_state_and_sleep(struct apple_bce_device *bce)
 {
+    struct apple_bridge_mbox_msg msg;
     int attempt, status = 0;
-    u64 resp;
     dma_addr_t dma_addr;
     void *dma_ptr = NULL;
     size_t size = max(PAGE_SIZE, 4096UL);
@@ -271,21 +277,22 @@ static int bce_save_state_and_sleep(struct apple_bce_device *bce)
             break;
         }
         BUG_ON((dma_addr % 4096) != 0);
-        status = bce_mailbox_send(&bce->mbox,
-                BCE_MB_MSG(BCE_MB_SAVE_STATE_AND_SLEEP, (dma_addr & ~(4096LLU - 1)) | (size / 4096)), &resp);
+        msg.type = BCE_MB_SAVE_STATE_AND_SLEEP;
+        msg.value = (dma_addr & ~(4096LLU - 1)) | (size / 4096);
+        status = mbox_send_message(&bce->mbox.chan, (void *)&msg);
         if (status) {
             pr_err("apple-bce: suspend failed (mailbox send)\n");
             break;
         }
-        if (BCE_MB_TYPE(resp) == BCE_MB_SAVE_RESTORE_STATE_COMPLETE) {
+        if (msg.type == BCE_MB_SAVE_RESTORE_STATE_COMPLETE) {
             bce->saved_data_dma_addr = dma_addr;
             bce->saved_data_dma_ptr = dma_ptr;
             bce->saved_data_dma_size = size;
             return 0;
-        } else if (BCE_MB_TYPE(resp) == BCE_MB_SAVE_STATE_AND_SLEEP_FAILURE) {
+        } else if (msg.type == BCE_MB_SAVE_STATE_AND_SLEEP_FAILURE) {
             dma_free_coherent(&bce->pci->dev, size, dma_ptr, dma_addr);
             /* The 0x10ff magic value was extracted from Apple's driver */
-            size = (BCE_MB_VALUE(resp) + 0x10ff) & ~(4096LLU - 1);
+            size = (msg.value + 0x10ff) & ~(4096LLU - 1);
             pr_debug("apple-bce: suspend: device requested a larger buffer (%li)\n", size);
             continue;
         } else {
@@ -296,33 +303,41 @@ static int bce_save_state_and_sleep(struct apple_bce_device *bce)
     }
     if (dma_ptr)
         dma_free_coherent(&bce->pci->dev, size, dma_ptr, dma_addr);
-    if (!status)
-        return bce_mailbox_send(&bce->mbox, BCE_MB_MSG(BCE_MB_SLEEP_NO_STATE, 0), &resp);
+    if (!status) {
+        msg.type = BCE_MB_SLEEP_NO_STATE;
+        msg.value = 0;
+        return mbox_send_message(&bce->mbox.chan, (void *)&msg);
+    }
     return status;
 }
 
 static int bce_restore_state_and_wake(struct apple_bce_device *bce)
 {
+    struct apple_bridge_mbox_msg msg;
     int status;
-    u64 resp;
     if (!bce->saved_data_dma_ptr) {
-        if ((status = bce_mailbox_send(&bce->mbox, BCE_MB_MSG(BCE_MB_RESTORE_NO_STATE, 0), &resp))) {
+       msg.type = BCE_MB_RESTORE_NO_STATE;
+       msg.value = 0;
+       status = mbox_send_message(&bce->mbox.chan, (void *)&msg);
+       if (status) {
             pr_err("apple-bce: resume with no state failed (mailbox send)\n");
             return status;
         }
-        if (BCE_MB_TYPE(resp) != BCE_MB_RESTORE_NO_STATE) {
+        if (msg.type != BCE_MB_RESTORE_NO_STATE) {
             pr_err("apple-bce: resume with no state failed (invalid device response)\n");
             return -EINVAL;
         }
         return 0;
     }
 
-    if ((status = bce_mailbox_send(&bce->mbox, BCE_MB_MSG(BCE_MB_RESTORE_STATE_AND_WAKE,
-            (bce->saved_data_dma_addr & ~(4096LLU - 1)) | (bce->saved_data_dma_size / 4096)), &resp))) {
+    msg.type = BCE_MB_RESTORE_STATE_AND_WAKE;
+    msg.value = (bce->saved_data_dma_addr & ~(4096LLU - 1)) | (bce->saved_data_dma_size / 4096);
+    status = mbox_send_message(&bce->mbox.chan, (void *)&msg);
+    if (status) {
         pr_err("apple-bce: resume with state failed (mailbox send)\n");
         goto finish_with_state;
     }
-    if (BCE_MB_TYPE(resp) != BCE_MB_SAVE_RESTORE_STATE_COMPLETE) {
+    if (msg.type != BCE_MB_SAVE_RESTORE_STATE_COMPLETE) {
         pr_err("apple-bce: resume with state failed (invalid device response)\n");
         status = -EINVAL;
         goto finish_with_state;

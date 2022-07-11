@@ -18,7 +18,7 @@ struct apple_bce_device {
     struct device *dev;
     void __iomem *reg_mem_mb;
     void __iomem *reg_mem_dma;
-    struct bce_mailbox mbox;
+    struct apple_bridge_mbox mbox;
     struct bce_timestamp timestamp;
     struct bce_queue *queues[BCE_MAX_QUEUE_COUNT];
     struct spinlock queues_lock;

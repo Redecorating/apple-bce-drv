@@ -1,16 +1,31 @@
 #ifndef BCE_MAILBOX_H
 #define BCE_MAILBOX_H
 
+#include <linux/mailbox_controller.h>
+#include <linux/mailbox_client.h>
 #include <linux/completion.h>
 #include <linux/pci.h>
 #include <linux/timer.h>
 
-struct bce_mailbox {
+struct apple_bridge_mbox {
+    struct apple_bce_device *bce;
+    struct mbox_controller controller;
+    struct mbox_client client;
+    struct mbox_chan chan;
     void __iomem *reg_mb;
+    dma_addr_t result_dest;
+};
 
-    atomic_t mb_status; // possible statuses: 0 (no msg), 1 (has active msg), 2 (got reply)
-    struct completion mb_completion;
-    uint64_t mb_result;
+/*
+enum apple_bridge_mbox_status {
+    APPLE_BRIDGE_MBOX_NO_MSG = 0,
+    APPLE_BRIDGE_MBOX_ACTIVE_MSG = 1,
+    APPLE_BRIDGE_MBOX_GOT_REPLY = 2,
+};*/
+
+struct apple_bridge_mbox_msg {
+    int type; /* bce_message_type */
+    u64 value;
 };
 
 enum bce_message_type {
@@ -30,12 +45,8 @@ enum bce_message_type {
 #define BCE_MB_TYPE(v) ((u32) (v >> 58))
 #define BCE_MB_VALUE(v) (v & 0x3FFFFFFFFFFFFFFLL)
 
-void bce_mailbox_init(struct bce_mailbox *mb, void __iomem *reg_mb);
-
-int bce_mailbox_send(struct bce_mailbox *mb, u64 msg, u64* recv);
-
-int bce_mailbox_handle_interrupt(struct bce_mailbox *mb);
-
+int bce_mailbox_init(struct apple_bce_device *bce, void __iomem *reg_mb);
+void bce_mailbox_exit(struct apple_bridge_mbox *mb);
 
 struct bce_timestamp {
     void __iomem *reg;
