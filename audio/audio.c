@@ -553,7 +553,7 @@ static void aaudio_handle_jack_connection_change(struct aaudio_subdevice *sdev)
         dev_err(sdev->a->dev, "Failed to get jack enable status\n");
         return;
     }
-    dev_dbg(sdev->a->dev, "Jack is now %s\n", plugged ? "plugged" : "unplugged");
+    dev_info(sdev->a->dev, "Jack is now %s\n", plugged ? "plugged" : "unplugged");
     snd_jack_report(sdev->jack, plugged ? sdev->jack->type : 0);
 }
 
