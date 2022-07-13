@@ -3,6 +3,7 @@
 
 #include <linux/pci.h>
 #include <linux/spinlock.h>
+#include <linux/auxiliary_bus.h>
 #include "mailbox.h"
 #include "queue.h"
 
@@ -11,6 +12,9 @@
 
 #define BCE_QUEUE_USER_MIN 2
 #define BCE_QUEUE_USER_MAX (BCE_MAX_QUEUE_COUNT - 1)
+
+#define BCE_VHCI_AUX_DEVICE_NAME "vhci"
+#define BCE_AUDIO_AUX_DEVICE_NAME "audio"
 
 struct apple_bce_device {
     struct pci_dev *pci, *pci0;
@@ -31,8 +35,8 @@ struct apple_bce_device {
     dma_addr_t saved_data_dma_addr;
     void *saved_data_dma_ptr;
     size_t saved_data_dma_size;
-};
 
-extern struct apple_bce_device *global_bce;
+    struct auxiliary_device vhci_aux_dev, audio_aux_dev;
+};
 
 #endif //APPLE_BCE_H
