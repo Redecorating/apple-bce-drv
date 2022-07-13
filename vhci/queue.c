@@ -8,16 +8,16 @@ static void bce_vhci_message_queue_completion(struct bce_queue_sq *sq);
 int bce_vhci_message_queue_create(struct bce_vhci *vhci, struct bce_vhci_message_queue *ret, const char *name)
 {
     int status;
-    ret->cq = bce_create_cq(vhci->dev, VHCI_EVENT_QUEUE_EL_COUNT);
+    ret->cq = bce_create_cq(vhci->bce, VHCI_EVENT_QUEUE_EL_COUNT);
     if (!ret->cq)
         return -EINVAL;
-    ret->sq = bce_create_sq(vhci->dev, ret->cq, name, VHCI_EVENT_QUEUE_EL_COUNT, DMA_TO_DEVICE,
+    ret->sq = bce_create_sq(vhci->bce, ret->cq, name, VHCI_EVENT_QUEUE_EL_COUNT, DMA_TO_DEVICE,
                             bce_vhci_message_queue_completion, ret);
     if (!ret->sq) {
         status = -EINVAL;
         goto fail_cq;
     }
-    ret->data = dma_alloc_coherent(&vhci->dev->pci->dev, sizeof(struct bce_vhci_message) * VHCI_EVENT_QUEUE_EL_COUNT,
+    ret->data = dma_alloc_coherent(&vhci->bce->pci->dev, sizeof(struct bce_vhci_message) * VHCI_EVENT_QUEUE_EL_COUNT,
                                    &ret->dma_addr, GFP_KERNEL);
     if (!ret->data) {
         status = -EINVAL;
@@ -26,10 +26,10 @@ int bce_vhci_message_queue_create(struct bce_vhci *vhci, struct bce_vhci_message
     return 0;
 
 fail_sq:
-    bce_destroy_sq(vhci->dev, ret->sq);
+    bce_destroy_sq(vhci->bce, ret->sq);
     ret->sq = NULL;
 fail_cq:
-    bce_destroy_cq(vhci->dev, ret->cq);
+    bce_destroy_cq(vhci->bce, ret->cq);
     ret->cq = NULL;
     return status;
 }
@@ -38,10 +38,10 @@ void bce_vhci_message_queue_destroy(struct bce_vhci *vhci, struct bce_vhci_messa
 {
     if (!q->cq)
         return;
-    dma_free_coherent(&vhci->dev->pci->dev, sizeof(struct bce_vhci_message) * VHCI_EVENT_QUEUE_EL_COUNT,
+    dma_free_coherent(&vhci->bce->pci->dev, sizeof(struct bce_vhci_message) * VHCI_EVENT_QUEUE_EL_COUNT,
                       q->data, q->dma_addr);
-    bce_destroy_sq(vhci->dev, q->sq);
-    bce_destroy_cq(vhci->dev, q->cq);
+    bce_destroy_sq(vhci->bce, q->sq);
+    bce_destroy_cq(vhci->bce, q->cq);
 }
 
 void bce_vhci_message_queue_write(struct bce_vhci_message_queue *q, struct bce_vhci_message *req)
@@ -67,13 +67,13 @@ int __bce_vhci_event_queue_create(struct bce_vhci *vhci, struct bce_vhci_event_q
 {
     ret->vhci = vhci;
 
-    ret->sq = bce_create_sq(vhci->dev, vhci->ev_cq, name, VHCI_EVENT_QUEUE_EL_COUNT, DMA_FROM_DEVICE, compl, ret);
+    ret->sq = bce_create_sq(vhci->bce, vhci->ev_cq, name, VHCI_EVENT_QUEUE_EL_COUNT, DMA_FROM_DEVICE, compl, ret);
     if (!ret->sq)
         return -EINVAL;
-    ret->data = dma_alloc_coherent(&vhci->dev->pci->dev, sizeof(struct bce_vhci_message) * VHCI_EVENT_QUEUE_EL_COUNT,
+    ret->data = dma_alloc_coherent(&vhci->bce->pci->dev, sizeof(struct bce_vhci_message) * VHCI_EVENT_QUEUE_EL_COUNT,
                                    &ret->dma_addr, GFP_KERNEL);
     if (!ret->data) {
-        bce_destroy_sq(vhci->dev, ret->sq);
+        bce_destroy_sq(vhci->bce, ret->sq);
         ret->sq = NULL;
         return -EINVAL;
     }
@@ -94,9 +94,9 @@ void bce_vhci_event_queue_destroy(struct bce_vhci *vhci, struct bce_vhci_event_q
 {
     if (!q->sq)
         return;
-    dma_free_coherent(&vhci->dev->pci->dev, sizeof(struct bce_vhci_message) * VHCI_EVENT_QUEUE_EL_COUNT,
+    dma_free_coherent(&vhci->bce->pci->dev, sizeof(struct bce_vhci_message) * VHCI_EVENT_QUEUE_EL_COUNT,
                       q->data, q->dma_addr);
-    bce_destroy_sq(vhci->dev, q->sq);
+    bce_destroy_sq(vhci->bce, q->sq);
 }
 
 static void bce_vhci_event_queue_completion(struct bce_queue_sq *sq)
@@ -144,7 +144,7 @@ void bce_vhci_event_queue_pause(struct bce_vhci_event_queue *q)
 {
     unsigned long timeout;
     reinit_completion(&q->queue_empty_completion);
-    if (bce_cmd_flush_memory_queue(q->vhci->dev->cmd_cmdq, q->sq->qid))
+    if (bce_cmd_flush_memory_queue(q->vhci->bce->cmd_cmdq, q->sq->qid))
         pr_warn("bce-vhci: failed to flush event queue\n");
     timeout = msecs_to_jiffies(5000);
     while (atomic_read(&q->sq->available_commands) != q->sq->el_count - 1) {

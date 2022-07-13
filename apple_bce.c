@@ -100,7 +100,7 @@ static int apple_bce_probe(struct pci_dev *dev, const struct pci_device_id *id)
 
     bce->vhci_aux_dev.name = BCE_VHCI_AUX_DEVICE_NAME;
     bce->vhci_aux_dev.id = 0;
-    bce->vhci_aux_dev.dev.parent = bce->dev;
+    bce->vhci_aux_dev.dev.parent = &bce->pci->dev;
     bce->vhci_aux_dev.dev.release = &apple_bce_noop; //TODO: should it be noop?
     
     if ((status = auxiliary_device_init(&bce->vhci_aux_dev)))
@@ -113,7 +113,7 @@ static int apple_bce_probe(struct pci_dev *dev, const struct pci_device_id *id)
 
     bce->audio_aux_dev.name = BCE_AUDIO_AUX_DEVICE_NAME;
     bce->audio_aux_dev.id = 0;
-    bce->audio_aux_dev.dev.parent = bce->dev;
+    bce->audio_aux_dev.dev.parent = &bce->pci->dev;
     bce->audio_aux_dev.dev.release = &apple_bce_noop; //TODO: should it be noop?
     
     if ((status = auxiliary_device_init(&bce->audio_aux_dev)))

@@ -33,18 +33,18 @@ void bce_vhci_create_transfer_queue(struct bce_vhci *vhci, struct bce_vhci_trans
     if (usb_endpoint_type(&endp->desc) == USB_ENDPOINT_XFER_BULK)
         q->max_active_requests = BCE_VHCI_BULK_MAX_ACTIVE_URBS;
     q->remaining_active_requests = q->max_active_requests;
-    q->cq = bce_create_cq(vhci->dev, 0x100);
+    q->cq = bce_create_cq(vhci->bce, 0x100);
     INIT_WORK(&q->w_reset, bce_vhci_transfer_queue_reset_w);
     q->sq_in = NULL;
     if (dir == DMA_FROM_DEVICE || dir == DMA_BIDIRECTIONAL) {
         snprintf(name, sizeof(name), "VHC1-%i-%02x", dev_addr, 0x80 | usb_endpoint_num(&endp->desc));
-        q->sq_in = bce_create_sq(vhci->dev, q->cq, name, 0x100, DMA_FROM_DEVICE,
+        q->sq_in = bce_create_sq(vhci->bce, q->cq, name, 0x100, DMA_FROM_DEVICE,
                                  bce_vhci_transfer_queue_completion, q);
     }
     q->sq_out = NULL;
     if (dir == DMA_TO_DEVICE || dir == DMA_BIDIRECTIONAL) {
         snprintf(name, sizeof(name), "VHC1-%i-%02x", dev_addr, usb_endpoint_num(&endp->desc));
-        q->sq_out = bce_create_sq(vhci->dev, q->cq, name, 0x100, DMA_TO_DEVICE,
+        q->sq_out = bce_create_sq(vhci->bce, q->cq, name, 0x100, DMA_TO_DEVICE,
                                   bce_vhci_transfer_queue_completion, q);
     }
 }
@@ -54,10 +54,10 @@ void bce_vhci_destroy_transfer_queue(struct bce_vhci *vhci, struct bce_vhci_tran
     bce_vhci_transfer_queue_giveback(q);
     bce_vhci_transfer_queue_remove_pending(q);
     if (q->sq_in)
-        bce_destroy_sq(vhci->dev, q->sq_in);
+        bce_destroy_sq(vhci->bce, q->sq_in);
     if (q->sq_out)
-        bce_destroy_sq(vhci->dev, q->sq_out);
-    bce_destroy_cq(vhci->dev, q->cq);
+        bce_destroy_sq(vhci->bce, q->sq_out);
+    bce_destroy_cq(vhci->bce, q->cq);
 }
 
 static inline bool bce_vhci_transfer_queue_can_init_urb(struct bce_vhci_transfer_queue *q)
@@ -199,9 +199,9 @@ int bce_vhci_transfer_queue_do_pause(struct bce_vhci_transfer_queue *q)
     if (q->state != BCE_VHCI_ENDPOINT_PAUSED)
         return -EINVAL;
     if (q->sq_in)
-        bce_cmd_flush_memory_queue(q->vhci->dev->cmd_cmdq, (u16) q->sq_in->qid);
+        bce_cmd_flush_memory_queue(q->vhci->bce->cmd_cmdq, (u16) q->sq_in->qid);
     if (q->sq_out)
-        bce_cmd_flush_memory_queue(q->vhci->dev->cmd_cmdq, (u16) q->sq_out->qid);
+        bce_cmd_flush_memory_queue(q->vhci->bce->cmd_cmdq, (u16) q->sq_out->qid);
     return 0;
 }
 
@@ -281,9 +281,9 @@ static void bce_vhci_transfer_queue_reset_w(struct work_struct *work)
     q->paused_by |= BCE_VHCI_PAUSE_INTERNAL_WQ;
     bce_vhci_transfer_queue_remove_pending(q);
     if (q->sq_in)
-        bce_cmd_flush_memory_queue(q->vhci->dev->cmd_cmdq, (u16) q->sq_in->qid);
+        bce_cmd_flush_memory_queue(q->vhci->bce->cmd_cmdq, (u16) q->sq_in->qid);
     if (q->sq_out)
-        bce_cmd_flush_memory_queue(q->vhci->dev->cmd_cmdq, (u16) q->sq_out->qid);
+        bce_cmd_flush_memory_queue(q->vhci->bce->cmd_cmdq, (u16) q->sq_out->qid);
     bce_vhci_cmd_endpoint_reset(&q->vhci->cq, q->dev_addr, (u8) (q->endp->desc.bEndpointAddress & 0x8F));
     spin_lock_irqsave(&q->urb_lock, flags);
     q->stalled = false;
