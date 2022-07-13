@@ -20,7 +20,7 @@ static void bce_vhci_destroy_message_queues(struct bce_vhci *vhci);
 static void bce_vhci_handle_firmware_events_w(struct work_struct *ws);
 static void bce_vhci_firmware_event_completion(struct bce_queue_sq *sq);
 
-int bce_vhci_create(struct auxiliary_device *auxdev, const struct auxiliary_device_id *id)
+int bce_vhci_create(struct auxiliary_device *aux_dev, const struct auxiliary_device_id *id)
 {
     struct bce_vhci *vhci = NULL;
     int status;
@@ -31,13 +31,15 @@ int bce_vhci_create(struct auxiliary_device *auxdev, const struct auxiliary_devi
         goto fail;
     }
 
-	vhci->auxdev = auxdev;
-	vhci->dev = container_of(auxdev, struct apple_bce_device, vhci_aux_dev);
+	vhci->aux_dev = aux_dev;
+	vhci->dev = &aux_dev->dev;
+	vhci->bce = dev_get_drvdata(aux_dev->dev.parent);
 
-	auxiliary_set_drvdata(auxdev, vhci);
+	auxiliary_set_drvdata(aux_dev, vhci);
+    dev_warn(vhci->dev, "test!!\n");
 
-    if (!vhci->dev) {
-        dev_warn(vhci->dev->dev, "bce_vhci: No BCE available\n");
+    if (!vhci->bce) {
+        dev_warn(vhci->dev, "bce_vhci: No BCE available\n");
         status = -EINVAL;
         goto fail_dev;
     }
@@ -45,7 +47,7 @@ int bce_vhci_create(struct auxiliary_device *auxdev, const struct auxiliary_devi
     spin_lock_init(&vhci->hcd_spinlock);
 
     vhci->vdevt = bce_vhci_chrdev;
-    vhci->vdev = device_create(bce_vhci_class, vhci->dev->dev, vhci->vdevt, NULL, "bce-vhci");
+    vhci->vdev = device_create(bce_vhci_class, vhci->bce->dev, vhci->vdevt, NULL, "bce-vhci");
     if (IS_ERR_OR_NULL(vhci->vdev)) {
         status = PTR_ERR(vhci->vdev);
         goto fail_dev;
@@ -64,7 +66,7 @@ int bce_vhci_create(struct auxiliary_device *auxdev, const struct auxiliary_devi
         status = -ENOMEM;
         goto fail_hcd;
     }
-    vhci->hcd->self.sysdev = &vhci->dev->pci->dev;
+    vhci->hcd->self.sysdev = &vhci->bce->pci->dev;
     *((struct bce_vhci **) vhci->hcd->hcd_priv) = vhci;
     vhci->hcd->speed = HCD_USB2;
 
@@ -89,9 +91,9 @@ fail:
     return status;
 }
 
-void bce_vhci_destroy(struct auxiliary_device *auxdev)
+void bce_vhci_destroy(struct auxiliary_device *aux_dev)
 {
-	struct bce_vhci *vhci = auxiliary_get_drvdata(auxdev);
+	struct bce_vhci *vhci = auxiliary_get_drvdata(aux_dev);
     usb_remove_hcd(vhci->hcd);
     bce_vhci_destroy_event_queues(vhci);
     bce_vhci_destroy_message_queues(vhci);
@@ -534,7 +536,7 @@ static void bce_vhci_handle_usb_event(struct bce_vhci_event_queue *q, struct bce
 
 static int bce_vhci_create_event_queues(struct bce_vhci *vhci)
 {
-    vhci->ev_cq = bce_create_cq(vhci->dev, 0x100);
+    vhci->ev_cq = bce_create_cq(vhci->bce, 0x100);
     if (!vhci->ev_cq)
         return -EINVAL;
 #define CREATE_EVENT_QUEUE(field, name, cb) bce_vhci_event_queue_create(vhci, &vhci->field, name, cb)
@@ -559,7 +561,7 @@ static void bce_vhci_destroy_event_queues(struct bce_vhci *vhci)
     bce_vhci_event_queue_destroy(vhci, &vhci->ev_interrupt);
     bce_vhci_event_queue_destroy(vhci, &vhci->ev_asynchronous);
     if (vhci->ev_cq)
-        bce_destroy_cq(vhci->dev, vhci->ev_cq);
+        bce_destroy_cq(vhci->bce, vhci->ev_cq);
 }
 
 static void bce_vhci_send_fw_event_response(struct bce_vhci *vhci, struct bce_vhci_message *req, u16 status)

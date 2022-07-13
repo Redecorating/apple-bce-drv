@@ -12,18 +12,23 @@ struct bce_vhci_device {
     u32 tq_mask;
 };
 struct bce_vhci {
-    struct apple_bce_device *dev;
-    struct auxiliary_device *auxdev;
+    struct auxiliary_device *aux_dev;
+    struct device *dev;
+    struct apple_bce_device *bce;
+
     dev_t vdevt;
     struct device *vdev;
+
     struct usb_hcd *hcd;
     struct spinlock hcd_spinlock;
+
     struct bce_vhci_message_queue msg_commands;
     struct bce_vhci_message_queue msg_system;
     struct bce_vhci_message_queue msg_isochronous;
     struct bce_vhci_message_queue msg_interrupt;
     struct bce_vhci_message_queue msg_asynchronous;
     struct spinlock msg_asynchronous_lock;
+
     struct bce_vhci_command_queue cq;
     struct bce_queue_cq *ev_cq;
     struct bce_vhci_event_queue ev_commands;
@@ -31,6 +36,7 @@ struct bce_vhci {
     struct bce_vhci_event_queue ev_isochronous;
     struct bce_vhci_event_queue ev_interrupt;
     struct bce_vhci_event_queue ev_asynchronous;
+
     u16 port_mask;
     u8 port_count;
     u16 port_power_mask;
