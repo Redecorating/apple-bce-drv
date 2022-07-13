@@ -6,12 +6,8 @@
 #include <linux/module.h>
 #include <linux/version.h>
 
-static dev_t bce_vhci_chrdev;
-static struct class *bce_vhci_class;
 static const struct hc_driver bce_vhci_driver;
 static u16 bce_vhci_port_mask = U16_MAX;
-
-struct bce_vhci *global_vhci;
 
 static int bce_vhci_create_event_queues(struct bce_vhci *vhci);
 static void bce_vhci_destroy_event_queues(struct bce_vhci *vhci);
@@ -36,32 +32,24 @@ int bce_vhci_create(struct auxiliary_device *aux_dev, const struct auxiliary_dev
 	vhci->bce = dev_get_drvdata(aux_dev->dev.parent);
 
 	auxiliary_set_drvdata(aux_dev, vhci);
-    dev_warn(vhci->dev, "test!!\n");
 
     if (!vhci->bce) {
         dev_warn(vhci->dev, "bce_vhci: No BCE available\n");
         status = -EINVAL;
-        goto fail_dev;
+        goto fail;
     }
 
     spin_lock_init(&vhci->hcd_spinlock);
 
-    vhci->vdevt = bce_vhci_chrdev;
-    vhci->vdev = device_create(bce_vhci_class, vhci->bce->dev, vhci->vdevt, NULL, "bce-vhci");
-    if (IS_ERR_OR_NULL(vhci->vdev)) {
-        status = PTR_ERR(vhci->vdev);
-        goto fail_dev;
-    }
-
     if ((status = bce_vhci_create_message_queues(vhci)))
-        goto fail_mq;
+        goto fail;
     if ((status = bce_vhci_create_event_queues(vhci)))
         goto fail_eq;
 
     vhci->tq_state_wq = alloc_ordered_workqueue("bce-vhci-tq-state", 0);
     INIT_WORK(&vhci->w_fw_events, bce_vhci_handle_firmware_events_w);
 
-    vhci->hcd = usb_create_hcd(&bce_vhci_driver, vhci->vdev, "bce-vhci");
+    vhci->hcd = usb_create_hcd(&bce_vhci_driver, vhci->dev, "apple-bridge-vhci");
     if (!vhci->hcd) {
         status = -ENOMEM;
         goto fail_hcd;
@@ -73,19 +61,14 @@ int bce_vhci_create(struct auxiliary_device *aux_dev, const struct auxiliary_dev
     if ((status = usb_add_hcd(vhci->hcd, 0, 0)))
         goto fail_hcd;
 
-    global_vhci = vhci;
-
     return 0;
 
 fail_hcd:
     bce_vhci_destroy_event_queues(vhci);
 fail_eq:
     bce_vhci_destroy_message_queues(vhci);
-fail_mq:
-    device_destroy(bce_vhci_class, vhci->vdevt);
-fail_dev:
-    kfree(vhci);
 fail:
+    kfree(vhci);
     if (!status)
         status = -EINVAL;
     return status;
@@ -97,7 +80,6 @@ void bce_vhci_destroy(struct auxiliary_device *aux_dev)
     usb_remove_hcd(vhci->hcd);
     bce_vhci_destroy_event_queues(vhci);
     bce_vhci_destroy_message_queues(vhci);
-    device_destroy(bce_vhci_class, vhci->vdevt);
 }
 
 struct bce_vhci *bce_vhci_from_hcd(struct usb_hcd *hcd)
@@ -744,7 +726,7 @@ static const struct hc_driver bce_vhci_driver = {
 };
 
 static const struct auxiliary_device_id apple_bridge_vhci_ids[] = {
-    { .name = "apple_bce.vhci" }, //TODO get this from header
+    { .name = "apple_bridge.vhci" }, //TODO get this from header
     {},
 };
 
@@ -760,23 +742,12 @@ struct auxiliary_driver apple_bridge_vhci_aux_driver = {
 int __init bce_vhci_module_init(void)
 {
     int result;
-    if ((result = alloc_chrdev_region(&bce_vhci_chrdev, 0, 1, "bce-vhci")))
-        goto fail_chrdev;
-    bce_vhci_class = class_create(THIS_MODULE, "bce-vhci");
-    if (IS_ERR(bce_vhci_class)) {
-        result = PTR_ERR(bce_vhci_class);
-        goto fail_class;
-    }
 
     if ((result = auxiliary_driver_register(&apple_bridge_vhci_aux_driver)))
     	goto fail_class;
-
     return 0;
 
 fail_class:
-    class_destroy(bce_vhci_class);
-fail_chrdev:
-    unregister_chrdev_region(bce_vhci_chrdev, 1);
     if (!result)
         result = -EINVAL;
     return result;
@@ -784,9 +755,6 @@ fail_chrdev:
 void __exit bce_vhci_module_exit(void)
 {
 	auxiliary_driver_unregister(&apple_bridge_vhci_aux_driver);
-
-    class_destroy(bce_vhci_class);
-    unregister_chrdev_region(bce_vhci_chrdev, 1);
 }
 
 module_param_named(vhci_port_mask, bce_vhci_port_mask, ushort, 0444);

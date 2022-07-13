@@ -16,9 +16,6 @@ struct bce_vhci {
     struct device *dev;
     struct apple_bce_device *bce;
 
-    dev_t vdevt;
-    struct device *vdev;
-
     struct usb_hcd *hcd;
     struct spinlock hcd_spinlock;
 
