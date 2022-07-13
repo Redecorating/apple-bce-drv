@@ -13,6 +13,7 @@ struct bce_vhci_device {
 };
 struct bce_vhci {
     struct apple_bce_device *dev;
+    struct auxiliary_device *auxdev;
     dev_t vdevt;
     struct device *vdev;
     struct usb_hcd *hcd;

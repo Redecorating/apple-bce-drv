@@ -20,7 +20,7 @@ static void bce_vhci_destroy_message_queues(struct bce_vhci *vhci);
 static void bce_vhci_handle_firmware_events_w(struct work_struct *ws);
 static void bce_vhci_firmware_event_completion(struct bce_queue_sq *sq);
 
-int bce_vhci_create(void)
+int bce_vhci_create(struct auxiliary_device *auxdev, const struct auxiliary_device_id *id)
 {
     struct bce_vhci *vhci = NULL;
     int status;
@@ -31,7 +31,11 @@ int bce_vhci_create(void)
         goto fail;
     }
 
-    vhci->dev = global_bce;
+	vhci->auxdev = auxdev;
+	vhci->dev = container_of(auxdev, struct apple_bce_device, vhci_aux_dev);
+
+	auxiliary_set_drvdata(auxdev, vhci);
+
     if (!vhci->dev) {
         dev_warn(vhci->dev->dev, "bce_vhci: No BCE available\n");
         status = -EINVAL;
@@ -61,9 +65,6 @@ int bce_vhci_create(void)
         goto fail_hcd;
     }
     vhci->hcd->self.sysdev = &vhci->dev->pci->dev;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5,4,0)
-    vhci->hcd->self.uses_dma = 1;
-#endif
     *((struct bce_vhci **) vhci->hcd->hcd_priv) = vhci;
     vhci->hcd->speed = HCD_USB2;
 
@@ -88,8 +89,9 @@ fail:
     return status;
 }
 
-void bce_vhci_destroy(struct bce_vhci *vhci)
+void bce_vhci_destroy(struct auxiliary_device *auxdev)
 {
+	struct bce_vhci *vhci = auxiliary_get_drvdata(auxdev);
     usb_remove_hcd(vhci->hcd);
     bce_vhci_destroy_event_queues(vhci);
     bce_vhci_destroy_message_queues(vhci);
@@ -719,11 +721,7 @@ static const struct hc_driver bce_vhci_driver = {
         .product_desc = "BCE VHCI Host Controller",
         .hcd_priv_size = sizeof(struct bce_vhci *),
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5,4,0)
-        .flags = HCD_USB2,
-#else
         .flags = HCD_USB2 | HCD_DMA,
-#endif
 
         .start = bce_vhci_start,
         .stop = bce_vhci_stop,
@@ -743,6 +741,19 @@ static const struct hc_driver bce_vhci_driver = {
         .bus_resume = bce_vhci_bus_resume
 };
 
+static const struct auxiliary_device_id apple_bridge_vhci_ids[] = {
+    { .name = "apple_bce.vhci" }, //TODO get this from header
+    {},
+};
+
+MODULE_DEVICE_TABLE(auxiliary, apple_bridge_vhci_ids);
+
+struct auxiliary_driver apple_bridge_vhci_aux_driver = {
+    .name = "apple_bridge_vhci",
+    .id_table = apple_bridge_vhci_ids,
+    .probe = &bce_vhci_create,
+    .remove = &bce_vhci_destroy,
+};
 
 int __init bce_vhci_module_init(void)
 {
@@ -755,7 +766,10 @@ int __init bce_vhci_module_init(void)
         goto fail_class;
     }
 
-    return bce_vhci_create();
+    if ((result = auxiliary_driver_register(&apple_bridge_vhci_aux_driver)))
+    	goto fail_class;
+
+    return 0;
 
 fail_class:
     class_destroy(bce_vhci_class);
@@ -767,7 +781,7 @@ fail_chrdev:
 }
 void __exit bce_vhci_module_exit(void)
 {
-    bce_vhci_destroy(global_vhci);
+	auxiliary_driver_unregister(&apple_bridge_vhci_aux_driver);
 
     class_destroy(bce_vhci_class);
     unregister_chrdev_region(bce_vhci_chrdev, 1);

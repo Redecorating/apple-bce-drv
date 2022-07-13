@@ -1,12 +1,10 @@
 #include "apple_bce.h"
+#include <linux/auxiliary_bus.h>
 #include <linux/module.h>
 #include <linux/crc32.h>
 
 static dev_t bce_chrdev;
 static struct class *bce_class;
-
-struct apple_bce_device *global_bce;
-EXPORT_SYMBOL_GPL(global_bce);
 
 static int bce_create_command_queues(struct apple_bce_device *bce);
 static void bce_free_command_queues(struct apple_bce_device *bce);
@@ -14,6 +12,8 @@ static irqreturn_t bce_handle_mb_irq(int irq, void *dev);
 static irqreturn_t bce_handle_dma_irq(int irq, void *dev);
 static int bce_fw_version_handshake(struct apple_bce_device *bce);
 static int bce_register_command_queue(struct apple_bce_device *bce, struct bce_queue_memcfg *cfg, int is_sq);
+
+static void apple_bce_noop(struct device *dev) {}
 
 static int apple_bce_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
@@ -98,10 +98,39 @@ static int apple_bce_probe(struct pci_dev *dev, const struct pci_device_id *id)
         goto fail_ts;
     }
 
-    global_bce = bce;
+    bce->vhci_aux_dev.name = BCE_VHCI_AUX_DEVICE_NAME;
+    bce->vhci_aux_dev.id = 0;
+    bce->vhci_aux_dev.dev.parent = bce->dev;
+    bce->vhci_aux_dev.dev.release = &apple_bce_noop; //TODO: should it be noop?
+    
+    if ((status = auxiliary_device_init(&bce->vhci_aux_dev)))
+        goto fail_cmdq;
+
+    if ((status = auxiliary_device_add(&bce->vhci_aux_dev))) {
+            auxiliary_device_uninit(&bce->vhci_aux_dev);
+            goto fail_cmdq;
+    }
+
+    bce->audio_aux_dev.name = BCE_AUDIO_AUX_DEVICE_NAME;
+    bce->audio_aux_dev.id = 0;
+    bce->audio_aux_dev.dev.parent = bce->dev;
+    bce->audio_aux_dev.dev.release = &apple_bce_noop; //TODO: should it be noop?
+    
+    if ((status = auxiliary_device_init(&bce->audio_aux_dev)))
+        goto fail_vhci_aux;
+
+    if ((status = auxiliary_device_add(&bce->audio_aux_dev))) {
+            auxiliary_device_uninit(&bce->audio_aux_dev);
+            goto fail_vhci_aux;
+    }
 
     return 0;
 
+fail_vhci_aux:
+	auxiliary_device_delete(&bce->vhci_aux_dev);
+	auxiliary_device_uninit(&bce->vhci_aux_dev);
+fail_cmdq:
+    bce_free_command_queues(bce);
 fail_ts:
     bce_timestamp_stop(&bce->timestamp);
 #ifndef WITHOUT_NVME_PATCH
@@ -237,6 +266,11 @@ static void apple_bce_remove(struct pci_dev *dev)
 {
     struct apple_bce_device *bce = pci_get_drvdata(dev);
     bce->is_being_removed = true;
+
+	auxiliary_device_delete(&bce->vhci_aux_dev);
+	auxiliary_device_uninit(&bce->vhci_aux_dev);
+	auxiliary_device_delete(&bce->audio_aux_dev);
+	auxiliary_device_uninit(&bce->audio_aux_dev);
 
     bce_timestamp_stop(&bce->timestamp);
 #ifndef WITHOUT_NVME_PATCH
