@@ -49,7 +49,7 @@ int bce_vhci_create(struct auxiliary_device *aux_dev, const struct auxiliary_dev
     vhci->tq_state_wq = alloc_ordered_workqueue("bce-vhci-tq-state", 0);
     INIT_WORK(&vhci->w_fw_events, bce_vhci_handle_firmware_events_w);
 
-    vhci->hcd = usb_create_hcd(&bce_vhci_driver, vhci->dev, "apple-bridge-vhci");
+    vhci->hcd = usb_create_hcd(&bce_vhci_driver, vhci->dev, "bce-vhci");
     if (!vhci->hcd) {
         status = -ENOMEM;
         goto fail_hcd;
@@ -77,6 +77,15 @@ fail:
 void bce_vhci_destroy(struct auxiliary_device *aux_dev)
 {
 	struct bce_vhci *vhci = auxiliary_get_drvdata(aux_dev);
+	u64 addr;
+	pr_err("state: 0x%x", vhci->hcd->state);
+	addr = (u64)vhci->hcd;
+	pr_err("hcd: 0x%llx\n", addr);
+	addr = (u64)(&vhci->hcd->self);
+	pr_err("hcd->self: 0x%llx\n", addr);
+	addr = (u64)vhci->hcd->self.controller;
+	pr_err("hcd->self.controller: 0x%llx\n", addr);
+
     usb_remove_hcd(vhci->hcd);
     bce_vhci_destroy_event_queues(vhci);
     bce_vhci_destroy_message_queues(vhci);
