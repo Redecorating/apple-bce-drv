@@ -170,7 +170,7 @@ static int bce_vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue, u1
         if (port_status & 0x40000)
             ps->wPortChange |= USB_PORT_STAT_C_CONNECTION;
 
-        pr_info("bce-vhci: Translated status %x to %x:%x\n", port_status, ps->wPortStatus, ps->wPortChange);
+        pr_debug("bce-vhci: Translated status %x to %x:%x\n", port_status, ps->wPortStatus, ps->wPortChange);
         return 0;
     } else if (typeReq == SetPortFeature) {
         if (wValue == USB_PORT_FEAT_POWER) {
@@ -185,7 +185,7 @@ static int bce_vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue, u1
         }
         if (wValue == USB_PORT_FEAT_SUSPEND) {
             /* TODO: Am I supposed to also suspend the endpoints? */
-            pr_info("bce-vhci: Suspending port %i\n", wIndex);
+            pr_debug("bce-vhci: Suspending port %i\n", wIndex);
             return bce_vhci_cmd_port_suspend(&vhci->cq, (u8) wIndex);
         }
     } else if (typeReq == ClearPortFeature) {
@@ -203,7 +203,7 @@ static int bce_vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue, u1
             return 0;
         }
         if (wValue == USB_PORT_FEAT_SUSPEND) {
-            pr_info("bce-vhci: Resuming port %i\n", wIndex);
+            pr_debug("bce-vhci: Resuming port %i\n", wIndex);
             return bce_vhci_cmd_port_resume(&vhci->cq, (u8) wIndex);
         }
     }
@@ -415,14 +415,14 @@ static int bce_vhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_
 static int bce_vhci_urb_dequeue(struct usb_hcd *hcd, struct urb *urb, int status)
 {
     struct bce_vhci_transfer_queue *q = urb->ep->hcpriv;
-    pr_info("bce_vhci_urb_dequeue %x\n", urb->ep->desc.bEndpointAddress);
+    pr_debug("bce_vhci_urb_dequeue %x\n", urb->ep->desc.bEndpointAddress);
     return bce_vhci_urb_request_cancel(q, urb, status);
 }
 
 static void bce_vhci_endpoint_reset(struct usb_hcd *hcd, struct usb_host_endpoint *ep)
 {
     struct bce_vhci_transfer_queue *q = ep->hcpriv;
-    pr_info("bce_vhci_endpoint_reset\n");
+    pr_debug("bce_vhci_endpoint_reset\n");
     if (q)
         bce_vhci_transfer_queue_request_reset(q);
 }
@@ -440,7 +440,7 @@ static int bce_vhci_add_endpoint(struct usb_hcd *hcd, struct usb_device *udev, s
     struct bce_vhci *vhci = bce_vhci_from_hcd(hcd);
     bce_vhci_device_t devid = vhci->port_to_device[udev->portnum];
     struct bce_vhci_device *vdev = vhci->devices[devid];
-    pr_info("bce_vhci_add_endpoint %x/%x:%x\n", udev->portnum, devid, endp_index);
+    pr_debug("bce_vhci_add_endpoint %x/%x:%x\n", udev->portnum, devid, endp_index);
 
     if (udev->bus->root_hub == udev) /* The USB hub */
         return 0;

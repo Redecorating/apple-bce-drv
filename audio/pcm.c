@@ -109,7 +109,7 @@ static struct aaudio_stream *aaudio_pcm_stream(struct snd_pcm_substream *substre
 
 static int aaudio_pcm_open(struct snd_pcm_substream *substream)
 {
-    pr_info("aaudio_pcm_open\n");
+    pr_debug("aaudio_pcm_open\n");
     substream->runtime->hw = *aaudio_pcm_stream(substream)->alsa_hw_desc;
 
     return 0;
@@ -117,7 +117,7 @@ static int aaudio_pcm_open(struct snd_pcm_substream *substream)
 
 static int aaudio_pcm_close(struct snd_pcm_substream *substream)
 {
-    pr_info("aaudio_pcm_close\n");
+    pr_debug("aaudio_pcm_close\n");
     return 0;
 }
 
@@ -129,7 +129,7 @@ static int aaudio_pcm_prepare(struct snd_pcm_substream *substream)
 static int aaudio_pcm_hw_params(struct snd_pcm_substream *substream, struct snd_pcm_hw_params *hw_params)
 {
     struct aaudio_stream *astream = aaudio_pcm_stream(substream);
-    pr_info("aaudio_pcm_hw_params\n");
+    pr_debug("aaudio_pcm_hw_params\n");
 
     if (!astream->buffer_cnt || !astream->buffers)
         return -EINVAL;
@@ -142,7 +142,7 @@ static int aaudio_pcm_hw_params(struct snd_pcm_substream *substream, struct snd_
 
 static int aaudio_pcm_hw_free(struct snd_pcm_substream *substream)
 {
-    pr_info("aaudio_pcm_hw_free\n");
+    pr_debug("aaudio_pcm_hw_free\n");
     return 0;
 }
 
@@ -163,7 +163,7 @@ static void aaudio_pcm_start(struct snd_pcm_substream *substream)
         buf = kmalloc(s, GFP_KERNEL);
         memcpy_fromio(buf, substream->runtime->dma_area, s);
         time_end = ktime_get();
-        pr_info("aaudio: Backed up the buffer in %lluns [%li]\n", ktime_to_ns(time_end - time_start),
+        pr_debug("aaudio: Backed up the buffer in %lluns [%li]\n", ktime_to_ns(time_end - time_start),
                 substream->runtime->control->appl_ptr);
     }
 
@@ -175,14 +175,14 @@ static void aaudio_pcm_start(struct snd_pcm_substream *substream)
         memcpy_toio(substream->runtime->dma_area, buf, s);
 
     time_end = ktime_get();
-    pr_info("aaudio: Started the audio device in %lluns\n", ktime_to_ns(time_end - time_start));
+    pr_debug("aaudio: Started the audio device in %lluns\n", ktime_to_ns(time_end - time_start));
 }
 
 static int aaudio_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 {
     struct aaudio_subdevice *sdev = snd_pcm_substream_chip(substream);
     struct aaudio_stream *stream = aaudio_pcm_stream(substream);
-    pr_info("aaudio_pcm_trigger %x\n", cmd);
+    pr_debug("aaudio_pcm_trigger %x\n", cmd);
 
     /* We only supports triggers on the #0 buffer */
     if (substream->number != 0)
