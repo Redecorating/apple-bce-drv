@@ -14,7 +14,7 @@ static int bce_vhci_urb_transfer_completion(struct bce_vhci_urb *urb, struct bce
 
 static void bce_vhci_transfer_queue_reset_w(struct work_struct *work);
 
-void bce_vhci_create_transfer_queue(struct bce_vhci *vhci, struct bce_vhci_transfer_queue *q,
+int bce_vhci_create_transfer_queue(struct bce_vhci *vhci, struct bce_vhci_transfer_queue *q,
         struct usb_host_endpoint *endp, bce_vhci_device_t dev_addr, enum dma_data_direction dir)
 {
     char name[0x21];
@@ -22,6 +22,7 @@ void bce_vhci_create_transfer_queue(struct bce_vhci *vhci, struct bce_vhci_trans
     INIT_LIST_HEAD(&q->giveback_urb_list);
     spin_lock_init(&q->urb_lock);
     mutex_init(&q->pause_lock);
+
     q->vhci = vhci;
     q->endp = endp;
     q->dev_addr = dev_addr;
@@ -30,23 +31,43 @@ void bce_vhci_create_transfer_queue(struct bce_vhci *vhci, struct bce_vhci_trans
     q->active = true;
     q->stalled = false;
     q->max_active_requests = 1;
+
     if (usb_endpoint_type(&endp->desc) == USB_ENDPOINT_XFER_BULK)
         q->max_active_requests = BCE_VHCI_BULK_MAX_ACTIVE_URBS;
+
     q->remaining_active_requests = q->max_active_requests;
     q->cq = bce_create_cq(vhci->bce, 0x100);
+
+    if (!q->cq)
+        return -EINVAL;
+
     INIT_WORK(&q->w_reset, bce_vhci_transfer_queue_reset_w);
+
     q->sq_in = NULL;
+
     if (dir == DMA_FROM_DEVICE || dir == DMA_BIDIRECTIONAL) {
         snprintf(name, sizeof(name), "VHC1-%i-%02x", dev_addr, 0x80 | usb_endpoint_num(&endp->desc));
         q->sq_in = bce_create_sq(vhci->bce, q->cq, name, 0x100, DMA_FROM_DEVICE,
                                  bce_vhci_transfer_queue_completion, q);
+        if (!q->sq_in) {
+            bce_destroy_cq(vhci->bce, q->cq);
+            return -EINVAL;
+        }
     }
     q->sq_out = NULL;
     if (dir == DMA_TO_DEVICE || dir == DMA_BIDIRECTIONAL) {
         snprintf(name, sizeof(name), "VHC1-%i-%02x", dev_addr, usb_endpoint_num(&endp->desc));
         q->sq_out = bce_create_sq(vhci->bce, q->cq, name, 0x100, DMA_TO_DEVICE,
                                   bce_vhci_transfer_queue_completion, q);
+        if (!q->sq_out) {
+            if (q->sq_in)
+                bce_destroy_sq(vhci->bce, q->sq_in);
+            bce_destroy_cq(vhci->bce, q->cq);
+            return -EINVAL;
+        }
     }
+
+    return 0;
 }
 
 void bce_vhci_destroy_transfer_queue(struct bce_vhci *vhci, struct bce_vhci_transfer_queue *q)

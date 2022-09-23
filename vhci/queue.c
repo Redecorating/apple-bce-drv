@@ -243,8 +243,11 @@ static int __bce_vhci_command_queue_execute(struct bce_vhci_command_queue *cq, s
         /* reply for the previous command most likely arrived */
     }
 
-    if ((res->cmd & ~0x8000) != req->cmd) {
-        pr_err("bce-vhci: Possible desync, cmd reply mismatch req=%x, res=%x\n", req->cmd, res->cmd);
+    if (!res->cmd)
+    	pr_info("bce-vhci: res=0, expect a desync, reloading this module may let you recover.\n");
+
+    if (res->cmd && ((res->cmd & ~0x8000) != req->cmd)) {
+        pr_err("bce-vhci: Possible desync, cmd reply mismatch req=0x%x, res=0x%x\n", req->cmd, res->cmd);
         return -EIO;
     }
     if (res->status == BCE_VHCI_SUCCESS)

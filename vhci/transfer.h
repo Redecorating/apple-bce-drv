@@ -64,7 +64,7 @@ struct bce_vhci_transfer_queue_urb_cancel_work {
     int status;
 };
 
-void bce_vhci_create_transfer_queue(struct bce_vhci *vhci, struct bce_vhci_transfer_queue *q,
+int bce_vhci_create_transfer_queue(struct bce_vhci *vhci, struct bce_vhci_transfer_queue *q,
         struct usb_host_endpoint *endp, bce_vhci_device_t dev_addr, enum dma_data_direction dir);
 void bce_vhci_destroy_transfer_queue(struct bce_vhci *vhci, struct bce_vhci_transfer_queue *q);
 void bce_vhci_transfer_queue_event(struct bce_vhci_transfer_queue *q, struct bce_vhci_message *msg);
