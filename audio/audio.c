@@ -12,9 +12,6 @@
 static int aaudio_alsa_index = SNDRV_DEFAULT_IDX1;
 static char *aaudio_alsa_id = SNDRV_DEFAULT_STR1;
 
-static dev_t aaudio_chrdev;
-static struct class *aaudio_class;
-
 static int aaudio_init_cmd(struct aaudio_device *a);
 static int aaudio_init_bs(struct aaudio_device *a);
 static void aaudio_init_dev(struct aaudio_device *a, aaudio_device_id_t dev_id);
@@ -50,6 +47,8 @@ static int aaudio_probe(struct auxiliary_device *aux_dev, const struct auxiliary
     	return -ENODEV;
     }
 
+    aaudio->dev = &aaudio->pci_dev->dev;
+
     if (pci_enable_device(aaudio->pci_dev))
         return -ENODEV;
     if (pci_request_regions(aaudio->pci_dev, "aaudio")) {
@@ -61,22 +60,14 @@ static int aaudio_probe(struct auxiliary_device *aux_dev, const struct auxiliary
     //pci_set_drvdata(aaudio->pci_dev, aaudio);//TODO remove?
     auxiliary_set_drvdata(aux_dev, aaudio);
 
-    aaudio->devt = aaudio_chrdev;
-    aaudio->dev = device_create(aaudio_class, &aaudio->pci_dev->dev, aaudio->devt, NULL, "aaudio");
-    if (IS_ERR_OR_NULL(aaudio->dev)) {
-        status = PTR_ERR(aaudio_class);
-        goto fail;
-    }
-    device_link_add(aaudio->dev, aaudio->bce->dev, DL_FLAG_PM_RUNTIME | DL_FLAG_AUTOREMOVE_CONSUMER);
-
     init_completion(&aaudio->remote_alive);
     INIT_LIST_HEAD(&aaudio->subdevice_list);
 
     /* Init: set an unknown flag in the bitset */
     if (pci_read_config_dword(aaudio->pci_dev, 4, &cfg))
-        dev_warn(&aaudio->pci_dev->dev, "aaudio: pci_read_config_dword fail\n");
+        dev_warn(aaudio->dev, "aaudio: pci_read_config_dword fail\n");
     if (pci_write_config_dword(aaudio->pci_dev, 4, cfg | 6u))
-        dev_warn(&aaudio->pci_dev->dev, "aaudio: pci_write_config_dword fail\n");
+        dev_warn(aaudio->dev, "aaudio: pci_write_config_dword fail\n");
 
     dev_info(aaudio->dev, "aaudio: bs len = %llx\n", pci_resource_len(aaudio->pci_dev, 0));
     aaudio->reg_mem_bs_dma = pci_resource_start(aaudio->pci_dev, 0);
@@ -86,17 +77,17 @@ static int aaudio_probe(struct auxiliary_device *aux_dev, const struct auxiliary
     aaudio->reg_mem_gpr = (u32 __iomem *) ((u8 __iomem *) aaudio->reg_mem_cfg + 0xC000);
 
     if (IS_ERR_OR_NULL(aaudio->reg_mem_bs) || IS_ERR_OR_NULL(aaudio->reg_mem_cfg)) {
-        dev_warn(&aaudio->pci_dev->dev, "aaudio: Failed to pci_iomap required regions\n");
+        dev_warn(aaudio->dev, "aaudio: Failed to pci_iomap required regions\n");
         goto fail;
     }
 
     if (aaudio_bce_init(aaudio)) {
-        dev_warn(&aaudio->pci_dev->dev, "aaudio: Failed to init BCE command transport\n");
+        dev_warn(aaudio->dev, "aaudio: Failed to init BCE command transport\n");
         goto fail; //TODO aaudio_bce_exit(struct aaudio_device *dev)
     }
 
     if (snd_card_new(aaudio->dev, aaudio_alsa_index, aaudio_alsa_id, THIS_MODULE, 0, &aaudio->card)) {
-        dev_err(&aaudio->pci_dev->dev, "aaudio: Failed to create ALSA card\n");
+        dev_err(aaudio->dev, "aaudio: Failed to create ALSA card\n");
         goto fail;
     }
     strcpy(aaudio->card->driver, "AppleT2");
@@ -107,20 +98,20 @@ static int aaudio_probe(struct auxiliary_device *aux_dev, const struct auxiliary
     aaudio->next_alsa_id = 100;
 
     if (aaudio_init_cmd(aaudio)) {
-        dev_err(&aaudio->pci_dev->dev, "aaudio: Failed to initialize over BCE\n");
+        dev_err(aaudio->dev, "aaudio: Failed to initialize over BCE\n");
         goto fail_snd;
     }
     if (aaudio_init_bs(aaudio)) {
-        dev_err(&aaudio->pci_dev->dev, "aaudio: Failed to initialize BufferStruct\n");
+        dev_err(aaudio->dev, "aaudio: Failed to initialize BufferStruct\n");
         goto fail_snd;
     }
     if ((status = aaudio_cmd_set_remote_access(aaudio, AAUDIO_REMOTE_ACCESS_ON))) {
-        dev_err(&aaudio->pci_dev->dev, "Failed to set remote access\n");
+        dev_err(aaudio->dev, "Failed to set remote access\n");
         return status;
     }
 
     if (snd_card_register(aaudio->card)) {
-        dev_err(&aaudio->pci_dev->dev, "aaudio: Failed to register ALSA sound device\n");
+        dev_err(aaudio->dev, "aaudio: Failed to register ALSA sound device\n");
         goto fail_snd;
     }
 
@@ -129,9 +120,6 @@ static int aaudio_probe(struct auxiliary_device *aux_dev, const struct auxiliary
 fail_snd:
     snd_card_free(aaudio->card);
 fail:
-    if (aaudio && aaudio->dev)
-        device_destroy(aaudio_class, aaudio->devt);
-
     if (!IS_ERR_OR_NULL(aaudio->reg_mem_bs))
         pci_iounmap(aaudio->pci_dev, aaudio->reg_mem_bs);
     if (!IS_ERR_OR_NULL(aaudio->reg_mem_cfg))
@@ -149,8 +137,6 @@ fail:
     return status;
 }
 
-
-
 static void aaudio_remove(struct auxiliary_device *aux_dev)
 {
     struct aaudio_subdevice *sdev;
@@ -167,7 +153,6 @@ static void aaudio_remove(struct auxiliary_device *aux_dev)
 
     pci_iounmap(aaudio->pci_dev, aaudio->reg_mem_bs);
     pci_iounmap(aaudio->pci_dev, aaudio->reg_mem_cfg);
-    device_destroy(aaudio_class, aaudio->devt);
     pci_free_irq_vectors(aaudio->pci_dev);
     pci_release_regions(aaudio->pci_dev);
     pci_disable_device(aaudio->pci_dev);
@@ -655,39 +640,7 @@ struct auxiliary_driver apple_bridge_audio_aux_driver = {
 	.resume = aaudio_resume
 };
 
-int  __init aaudio_module_init(void)
-{
-    int result;
-    if ((result = alloc_chrdev_region(&aaudio_chrdev, 0, 1, "aaudio")))
-        goto fail_chrdev;
-    aaudio_class = class_create(THIS_MODULE, "aaudio");
-    if (IS_ERR(aaudio_class)) {
-        result = PTR_ERR(aaudio_class);
-        goto fail_class;
-    }
-    
-    result = auxiliary_driver_register(&apple_bridge_audio_aux_driver);
-    if (result)
-        goto fail_drv;
-    return 0;
-
-fail_drv:
-    //pci_unregister_driver(&aaudio_pci_driver);
-fail_class:
-    class_destroy(aaudio_class);
-fail_chrdev:
-    unregister_chrdev_region(aaudio_chrdev, 1);
-    if (!result)
-        result = -EINVAL;
-    return result;
-}
-
-void __exit aaudio_module_exit(void)
-{
-    auxiliary_driver_unregister(&apple_bridge_audio_aux_driver);
-    class_destroy(aaudio_class);
-    unregister_chrdev_region(aaudio_chrdev, 1);
-}
+module_auxiliary_driver(apple_bridge_audio_aux_driver);
 
 struct aaudio_alsa_pcm_id_mapping aaudio_alsa_id_mappings[] = {
         {"Speaker", 0},
@@ -707,5 +660,3 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("MrARM");
 MODULE_DESCRIPTION("Apple BCE Audio Driver");
 MODULE_VERSION("0.02");
-module_init(aaudio_module_init);
-module_exit(aaudio_module_exit);
