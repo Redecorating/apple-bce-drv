@@ -47,6 +47,20 @@ int aaudio_bce_queue_init(struct aaudio_device *dev, struct aaudio_bce_queue *q,
     return 0;
 }
 
+static void aaudio_bce_queue_exit(struct aaudio_device *dev, struct aaudio_bce_queue *q) {
+	kfree(q->data);
+	bce_destroy_sq(dev->bce, q->sq);
+}
+
+void aaudio_bce_exit(struct aaudio_device *dev) {
+	struct aaudio_bce *bce = &dev->bcem;
+	//spin_lock_init(&bce->spinlock)
+	aaudio_bce_queue_exit(dev, &bce->qin);
+	aaudio_bce_queue_exit(dev, &bce->qout);
+	bce_destroy_cq(dev->bce, bce->cq);
+	//aaudio_bce_in_queue_submit_pending
+}
+
 static void aaudio_send_create_tag(struct aaudio_bce *b, int *tagn, char tag[4])
 {
     char tag_zero[5];

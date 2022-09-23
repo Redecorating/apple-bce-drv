@@ -20,21 +20,11 @@ static int aaudio_init_bs(struct aaudio_device *a);
 static void aaudio_init_dev(struct aaudio_device *a, aaudio_device_id_t dev_id);
 static void aaudio_free_dev(struct aaudio_subdevice *sdev);
 
-static int aaudio_probe(struct pci_dev *dev, const struct pci_device_id *id)
+static int aaudio_probe(struct auxiliary_device *aux_dev, const struct auxiliary_device_id *id)
 {
     struct aaudio_device *aaudio = NULL;
     int status = 0;
     u32 cfg;
-
-    pr_info("aaudio: capturing our device\n");
-
-    if (pci_enable_device(dev))
-        return -ENODEV;
-    if (pci_request_regions(dev, "aaudio")) {
-        status = -ENODEV;
-        goto fail;
-    }
-    pci_set_master(dev);
 
     aaudio = kzalloc(sizeof(struct aaudio_device), GFP_KERNEL);
     if (!aaudio) {
@@ -42,18 +32,37 @@ static int aaudio_probe(struct pci_dev *dev, const struct pci_device_id *id)
         goto fail;
     }
 
-    aaudio->bce = global_bce;
+    aaudio->aux_dev = aux_dev;
+    aaudio->bce = dev_get_drvdata(aux_dev->dev.parent);
+
     if (!aaudio->bce) {
-        dev_warn(&dev->dev, "aaudio: No BCE available\n");
-        status = -EINVAL;
+        dev_warn(&aux_dev->dev, "aaudio: No BCE available\n");
+        status = -EINVAL; //TODO free aaudio
         goto fail;
     }
 
-    aaudio->pci = dev;
-    pci_set_drvdata(dev, aaudio);
+    pr_info("aaudio: capturing our device\n");
+
+    aaudio->pci_dev = pci_get_device(PCI_VENDOR_ID_APPLE, 0x1803, NULL);
+
+    if (!aaudio->pci_dev) {
+    	dev_warn(&aux_dev->dev, "aaudio: Couldn't find PCI device\n");
+    	return -ENODEV;
+    }
+
+    if (pci_enable_device(aaudio->pci_dev))
+        return -ENODEV;
+    if (pci_request_regions(aaudio->pci_dev, "aaudio")) {
+        status = -ENODEV;
+        goto fail;
+    }
+    pci_set_master(aaudio->pci_dev);
+
+    //pci_set_drvdata(aaudio->pci_dev, aaudio);//TODO remove?
+    auxiliary_set_drvdata(aux_dev, aaudio);
 
     aaudio->devt = aaudio_chrdev;
-    aaudio->dev = device_create(aaudio_class, &dev->dev, aaudio->devt, NULL, "aaudio");
+    aaudio->dev = device_create(aaudio_class, &aaudio->pci_dev->dev, aaudio->devt, NULL, "aaudio");
     if (IS_ERR_OR_NULL(aaudio->dev)) {
         status = PTR_ERR(aaudio_class);
         goto fail;
@@ -64,30 +73,30 @@ static int aaudio_probe(struct pci_dev *dev, const struct pci_device_id *id)
     INIT_LIST_HEAD(&aaudio->subdevice_list);
 
     /* Init: set an unknown flag in the bitset */
-    if (pci_read_config_dword(dev, 4, &cfg))
-        dev_warn(&dev->dev, "aaudio: pci_read_config_dword fail\n");
-    if (pci_write_config_dword(dev, 4, cfg | 6u))
-        dev_warn(&dev->dev, "aaudio: pci_write_config_dword fail\n");
+    if (pci_read_config_dword(aaudio->pci_dev, 4, &cfg))
+        dev_warn(&aaudio->pci_dev->dev, "aaudio: pci_read_config_dword fail\n");
+    if (pci_write_config_dword(aaudio->pci_dev, 4, cfg | 6u))
+        dev_warn(&aaudio->pci_dev->dev, "aaudio: pci_write_config_dword fail\n");
 
-    dev_info(aaudio->dev, "aaudio: bs len = %llx\n", pci_resource_len(dev, 0));
-    aaudio->reg_mem_bs_dma = pci_resource_start(dev, 0);
-    aaudio->reg_mem_bs = pci_iomap(dev, 0, 0);
-    aaudio->reg_mem_cfg = pci_iomap(dev, 4, 0);
+    dev_info(aaudio->dev, "aaudio: bs len = %llx\n", pci_resource_len(aaudio->pci_dev, 0));
+    aaudio->reg_mem_bs_dma = pci_resource_start(aaudio->pci_dev, 0);
+    aaudio->reg_mem_bs = pci_iomap(aaudio->pci_dev, 0, 0);
+    aaudio->reg_mem_cfg = pci_iomap(aaudio->pci_dev, 4, 0);
 
     aaudio->reg_mem_gpr = (u32 __iomem *) ((u8 __iomem *) aaudio->reg_mem_cfg + 0xC000);
 
     if (IS_ERR_OR_NULL(aaudio->reg_mem_bs) || IS_ERR_OR_NULL(aaudio->reg_mem_cfg)) {
-        dev_warn(&dev->dev, "aaudio: Failed to pci_iomap required regions\n");
+        dev_warn(&aaudio->pci_dev->dev, "aaudio: Failed to pci_iomap required regions\n");
         goto fail;
     }
 
     if (aaudio_bce_init(aaudio)) {
-        dev_warn(&dev->dev, "aaudio: Failed to init BCE command transport\n");
-        goto fail;
+        dev_warn(&aaudio->pci_dev->dev, "aaudio: Failed to init BCE command transport\n");
+        goto fail; //TODO aaudio_bce_exit(struct aaudio_device *dev)
     }
 
     if (snd_card_new(aaudio->dev, aaudio_alsa_index, aaudio_alsa_id, THIS_MODULE, 0, &aaudio->card)) {
-        dev_err(&dev->dev, "aaudio: Failed to create ALSA card\n");
+        dev_err(&aaudio->pci_dev->dev, "aaudio: Failed to create ALSA card\n");
         goto fail;
     }
     strcpy(aaudio->card->driver, "AppleT2");
@@ -98,20 +107,20 @@ static int aaudio_probe(struct pci_dev *dev, const struct pci_device_id *id)
     aaudio->next_alsa_id = 100;
 
     if (aaudio_init_cmd(aaudio)) {
-        dev_err(&dev->dev, "aaudio: Failed to initialize over BCE\n");
+        dev_err(&aaudio->pci_dev->dev, "aaudio: Failed to initialize over BCE\n");
         goto fail_snd;
     }
     if (aaudio_init_bs(aaudio)) {
-        dev_err(&dev->dev, "aaudio: Failed to initialize BufferStruct\n");
+        dev_err(&aaudio->pci_dev->dev, "aaudio: Failed to initialize BufferStruct\n");
         goto fail_snd;
     }
     if ((status = aaudio_cmd_set_remote_access(aaudio, AAUDIO_REMOTE_ACCESS_ON))) {
-        dev_err(&dev->dev, "Failed to set remote access\n");
+        dev_err(&aaudio->pci_dev->dev, "Failed to set remote access\n");
         return status;
     }
 
     if (snd_card_register(aaudio->card)) {
-        dev_err(&dev->dev, "aaudio: Failed to register ALSA sound device\n");
+        dev_err(&aaudio->pci_dev->dev, "aaudio: Failed to register ALSA sound device\n");
         goto fail_snd;
     }
 
@@ -122,15 +131,18 @@ fail_snd:
 fail:
     if (aaudio && aaudio->dev)
         device_destroy(aaudio_class, aaudio->devt);
-    kfree(aaudio);
 
     if (!IS_ERR_OR_NULL(aaudio->reg_mem_bs))
-        pci_iounmap(dev, aaudio->reg_mem_bs);
+        pci_iounmap(aaudio->pci_dev, aaudio->reg_mem_bs);
     if (!IS_ERR_OR_NULL(aaudio->reg_mem_cfg))
-        pci_iounmap(dev, aaudio->reg_mem_cfg);
+        pci_iounmap(aaudio->pci_dev, aaudio->reg_mem_cfg);
 
-    pci_release_regions(dev);
-    pci_disable_device(dev);
+    pci_release_regions(aaudio->pci_dev);
+    pci_disable_device(aaudio->pci_dev);
+
+    pci_dev_put(aaudio->pci_dev);
+
+    kfree(aaudio);
 
     if (!status)
         status = -EINVAL;
@@ -139,10 +151,10 @@ fail:
 
 
 
-static void aaudio_remove(struct pci_dev *dev)
+static void aaudio_remove(struct auxiliary_device *aux_dev)
 {
     struct aaudio_subdevice *sdev;
-    struct aaudio_device *aaudio = pci_get_drvdata(dev);
+    struct aaudio_device *aaudio = auxiliary_get_drvdata(aux_dev);
 
     snd_card_free(aaudio->card);
     while (!list_empty(&aaudio->subdevice_list)) {
@@ -150,34 +162,37 @@ static void aaudio_remove(struct pci_dev *dev)
         list_del(&sdev->list);
         aaudio_free_dev(sdev);
     }
-    pci_iounmap(dev, aaudio->reg_mem_bs);
-    pci_iounmap(dev, aaudio->reg_mem_cfg);
+    
+    aaudio_bce_exit(aaudio);
+
+    pci_iounmap(aaudio->pci_dev, aaudio->reg_mem_bs);
+    pci_iounmap(aaudio->pci_dev, aaudio->reg_mem_cfg);
     device_destroy(aaudio_class, aaudio->devt);
-    pci_free_irq_vectors(dev);
-    pci_release_regions(dev);
-    pci_disable_device(dev);
+    pci_free_irq_vectors(aaudio->pci_dev);
+    pci_release_regions(aaudio->pci_dev);
+    pci_disable_device(aaudio->pci_dev);
     kfree(aaudio);
 }
 
-static int aaudio_suspend(struct device *dev)
+static int aaudio_suspend(struct auxiliary_device *aux_dev, pm_message_t state)
 {
-    struct aaudio_device *aaudio = pci_get_drvdata(to_pci_dev(dev));
+    struct aaudio_device *aaudio = auxiliary_get_drvdata(aux_dev);
 
     if (aaudio_cmd_set_remote_access(aaudio, AAUDIO_REMOTE_ACCESS_OFF))
-        dev_warn(aaudio->dev, "Failed to reset remote access\n");
+        dev_warn(aaudio->dev, "Failed to reset remote access\n"); //TODO ret err?
 
-    pci_disable_device(aaudio->pci);
+    pci_disable_device(aaudio->pci_dev);
     return 0;
 }
 
-static int aaudio_resume(struct device *dev)
+static int aaudio_resume(struct auxiliary_device *aux_dev)
 {
     int status;
-    struct aaudio_device *aaudio = pci_get_drvdata(to_pci_dev(dev));
+    struct aaudio_device *aaudio = auxiliary_get_drvdata(aux_dev);
 
-    if ((status = pci_enable_device(aaudio->pci)))
+    if ((status = pci_enable_device(aaudio->pci_dev)))
         return status;
-    pci_set_master(aaudio->pci);
+    pci_set_master(aaudio->pci_dev);
 
     if ((status = aaudio_cmd_set_remote_access(aaudio, AAUDIO_REMOTE_ACCESS_ON))) {
         dev_err(aaudio->dev, "Failed to set remote access\n");
@@ -474,7 +489,7 @@ static void aaudio_init_bs_stream_host(struct aaudio_device *a, struct aaudio_st
     dma_addr_t dma_addr;
     void *dma_ptr;
     size = strm->desc.bytes_per_packet * 16640;
-    dma_ptr = dma_alloc_coherent(&a->pci->dev, size, &dma_addr, GFP_KERNEL);
+    dma_ptr = dma_alloc_coherent(&a->pci_dev->dev, size, &dma_addr, GFP_KERNEL);
     if (!dma_ptr) {
         dev_err(a->dev, "dma_alloc_coherent failed\n");
         return;
@@ -624,29 +639,23 @@ void aaudio_handle_command(struct aaudio_device *a, struct aaudio_msg *msg)
     }
 }
 
-static struct pci_device_id aaudio_ids[  ] = {
-        { PCI_DEVICE(PCI_VENDOR_ID_APPLE, 0x1803) },
-        { 0, },
+static const struct auxiliary_device_id apple_bridge_audio_ids[] = {
+	{ .name = "apple_bce.audio"}, //TODO get from header
+	{},
 };
 
-MODULE_DEVICE_TABLE(pci, aaudio_ids);
+MODULE_DEVICE_TABLE(auxiliary, apple_bridge_audio_ids);
 
-struct dev_pm_ops aaudio_pci_driver_pm = {
-        .suspend = aaudio_suspend,
-        .resume = aaudio_resume
-};
-struct pci_driver aaudio_pci_driver = {
-        .name = "aaudio",
-        .id_table = aaudio_ids,
-        .probe = aaudio_probe,
-        .remove = aaudio_remove,
-        .driver = {
-                .pm = &aaudio_pci_driver_pm
-        }
+struct auxiliary_driver apple_bridge_audio_aux_driver = {
+	.name = "apple_bridge_audio",
+	.id_table = apple_bridge_audio_ids,
+	.probe = aaudio_probe,
+	.remove = aaudio_remove,
+	.suspend = aaudio_suspend,
+	.resume = aaudio_resume
 };
 
-
-int aaudio_module_init(void)
+int  __init aaudio_module_init(void)
 {
     int result;
     if ((result = alloc_chrdev_region(&aaudio_chrdev, 0, 1, "aaudio")))
@@ -657,13 +666,13 @@ int aaudio_module_init(void)
         goto fail_class;
     }
     
-    result = pci_register_driver(&aaudio_pci_driver);
+    result = auxiliary_driver_register(&apple_bridge_audio_aux_driver);
     if (result)
         goto fail_drv;
     return 0;
 
 fail_drv:
-    pci_unregister_driver(&aaudio_pci_driver);
+    //pci_unregister_driver(&aaudio_pci_driver);
 fail_class:
     class_destroy(aaudio_class);
 fail_chrdev:
@@ -673,9 +682,9 @@ fail_chrdev:
     return result;
 }
 
-void aaudio_module_exit(void)
+void __exit aaudio_module_exit(void)
 {
-    pci_unregister_driver(&aaudio_pci_driver);
+    auxiliary_driver_unregister(&apple_bridge_audio_aux_driver);
     class_destroy(aaudio_class);
     unregister_chrdev_region(aaudio_chrdev, 1);
 }

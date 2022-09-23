@@ -41,6 +41,7 @@ struct aaudio_send_ctx {
 };
 
 int aaudio_bce_init(struct aaudio_device *dev);
+void aaudio_bce_exit(struct aaudio_device *dev);
 int __aaudio_send_prepare(struct aaudio_bce *b, struct aaudio_send_ctx *ctx, char *tag);
 void __aaudio_send(struct aaudio_bce *b, struct aaudio_send_ctx *ctx);
 int __aaudio_send_cmd_sync(struct aaudio_bce *b, struct aaudio_send_ctx *ctx, struct aaudio_msg *reply);

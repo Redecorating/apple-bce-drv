@@ -90,7 +90,9 @@ struct aaudio_alsa_pcm_id_mapping {
 };
 
 struct aaudio_device {
-    struct pci_dev *pci;
+    struct auxiliary_device *aux_dev;
+    struct apple_bce_device *bce;
+    struct pci_dev *pci_dev;
     dev_t devt;
     struct device *dev;
     void __iomem *reg_mem_bs;
@@ -101,7 +103,6 @@ struct aaudio_device {
 
     struct aaudio_buffer_struct *bs;
 
-    struct apple_bce_device *bce;
     struct aaudio_bce bcem;
 
     struct snd_card *card;
