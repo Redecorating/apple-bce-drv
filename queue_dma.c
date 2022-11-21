@@ -84,8 +84,9 @@ static int bce_alloc_scatterlist_from_vm(struct sg_table *tbl, void *data, size_
     end_page   = ((size_t) data + len - 1) / PAGE_SIZE;
     page_count = end_page - start_page + 1;
 
+    // Ensure all our pointers to page structs fit in a continuous bit of memory
     if (page_count > PAGE_SIZE / sizeof(struct page *))
-        pages = vmalloc(page_count * sizeof(struct page *));
+        pages = vmalloc(page_count * sizeof(struct page *)); //TODO: are there flags to make this continuois?
     else
         pages = kmalloc(page_count * sizeof(struct page *), GFP_KERNEL);
 
@@ -123,8 +124,8 @@ static struct bce_segment_list_element_hostinfo *bce_map_segment_list(
     for_each_sg(pages, sg, pagen, i) {
         if (el >= el_end) {
             /* allocate a new page, this will be also done for the first element */
-            ptr = __get_free_page(GFP_KERNEL);
-            if (pptr && ptr == pptr + PAGE_SIZE) {
+            ptr = __get_free_page(GFP_KERNEL); //TODO when is this free'd
+            if (pptr && ptr == pptr + PAGE_SIZE) { // Got adjacent page
                 out->page_count++;
                 header->element_count += BCE_ELEMENTS_PER_ADDITIONAL_PAGE;
                 el_end += BCE_ELEMENTS_PER_ADDITIONAL_PAGE;
@@ -153,6 +154,7 @@ static struct bce_segment_list_element_hostinfo *bce_map_segment_list(
         el->addr = sg->dma_address;
         el->length = sg->length;
         header->data_size += el->length;
+        //header->element_count++? increasing it above means we can have half filled pages leading to incorrect count
     }
 
     /* DMA map */

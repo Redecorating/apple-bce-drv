@@ -208,7 +208,10 @@ static int __bce_vhci_command_queue_execute(struct bce_vhci_command_queue *cq, s
     int status;
     struct bce_vhci_command_queue_completion *c;
     struct bce_vhci_message creq;
+    struct bce_vhci *vhci = container_of(cq, struct bce_vhci, cq);
     c = &cq->completion;
+    if (vhci->desynced)
+    	pr_info("%s after desync: 0x%x\n", __func__, req->cmd);
 
     if ((status = bce_reserve_submission(cq->mq->sq, &timeout)))
         return status;
@@ -222,7 +225,7 @@ static int __bce_vhci_command_queue_execute(struct bce_vhci_command_queue *cq, s
 
     if (!wait_for_completion_timeout(&c->completion, timeout)) {
         /* we ran out of time, send cancellation */
-        pr_debug("bce-vhci: command timed out req=%x\n", req->cmd);
+        pr_info("bce-vhci: command timed out req=%x\n", req->cmd);
         if ((status = bce_reserve_submission(cq->mq->sq, &timeout)))
             return status;
 
@@ -232,6 +235,7 @@ static int __bce_vhci_command_queue_execute(struct bce_vhci_command_queue *cq, s
 
         if (!wait_for_completion_timeout(&c->completion, 1000)) {
             pr_err("bce-vhci: Possible desync, cmd cancel timed out\n");
+            vhci->desynced = true;
 
             spin_lock(&cq->completion_lock);
             c->result = NULL;

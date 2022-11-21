@@ -451,6 +451,18 @@ static void bce_vhci_urb_cancel_w(struct work_struct *ws)
     struct bce_vhci_transfer_queue_urb_cancel_work *w =
             container_of(ws, struct bce_vhci_transfer_queue_urb_cancel_work, ws);
 
+    if (!w) {
+    	pr_err("%s: w was null!\n", __func__);
+    }
+    if (!w->q) {
+    	pr_err("%s: w->q was null!\n", __func__);
+    }
+    if (!w->urb) {
+    	pr_err("%s: w->urb was null!\n", __func__);
+    }
+    if (!w->status) {
+    	pr_err("%s: w->status was null!\n", __func__);
+    }
     pr_debug("bce-vhci: [%02x] Cancelling URB\n", w->q->endp_addr);
     bce_vhci_transfer_queue_pause(w->q, BCE_VHCI_PAUSE_INTERNAL_WQ);
     bce_vhci_urb_remove(w->q, w->urb, w->status);

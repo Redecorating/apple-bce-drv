@@ -37,6 +37,8 @@ struct bce_vhci {
     struct bce_vhci_event_queue ev_interrupt;
     struct bce_vhci_event_queue ev_asynchronous;
 
+    bool desynced;
+
     u16 port_mask;
     u8 port_count;
     u16 port_power_mask;
