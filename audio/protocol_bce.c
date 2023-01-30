@@ -48,7 +48,7 @@ int aaudio_bce_queue_init(struct aaudio_device *dev, struct aaudio_bce_queue *q,
 }
 
 static void aaudio_bce_queue_exit(struct aaudio_device *dev, struct aaudio_bce_queue *q) {
-	kfree(q->data);
+	//kfree(q->data);
 	bce_destroy_sq(dev->bce, q->sq);
 }
 
