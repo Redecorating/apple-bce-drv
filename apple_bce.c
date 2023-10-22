@@ -373,6 +373,8 @@ static struct pci_device_id apple_bce_ids[  ] = {
         { 0, },
 };
 
+MODULE_DEVICE_TABLE(pci, apple_bce_ids);
+
 struct dev_pm_ops apple_bce_pci_driver_pm = {
         .suspend = apple_bce_suspend,
         .resume = apple_bce_resume
