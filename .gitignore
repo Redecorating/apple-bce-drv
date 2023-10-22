@@ -4,3 +4,4 @@
 *.ko*
 *.order
 Module.symvers
+*.patch
