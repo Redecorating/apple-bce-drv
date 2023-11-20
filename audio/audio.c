@@ -8,6 +8,7 @@
 #include <sound/jack.h>
 #include "audio.h"
 #include "pcm.h"
+#include <linux/version.h>
 
 static int aaudio_alsa_index = SNDRV_DEFAULT_IDX1;
 static char *aaudio_alsa_id = SNDRV_DEFAULT_STR1;
@@ -125,8 +126,6 @@ static int aaudio_probe(struct auxiliary_device *aux_dev, const struct auxiliary
             struct snd_pcm_hardware *hw = sdev->out_streams[0].alsa_hw_desc;
 
             snprintf(aaudio->card->driver, sizeof(aaudio->card->driver) / sizeof(char), "AppleT2x%d", hw->channels_min);
-
-            break;
         }
     }
 
