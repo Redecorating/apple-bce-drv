@@ -400,14 +400,16 @@ EXPORT_SYMBOL_GPL(bce_create_sq);
 
 void bce_destroy_cq(struct apple_bce_device *dev, struct bce_queue_cq *cq)
 {
+    u16 qid;
     if (!dev->is_being_removed && bce_cmd_unregister_memory_queue(dev->cmd_cmdq, (u16) cq->qid))
         pr_err("apple-bce: CQ unregister failed");
     spin_lock(&dev->queues_lock);
     dev->queues[cq->qid] = NULL;
     spin_unlock(&dev->queues_lock);
     ida_simple_remove(&dev->queue_ida, (uint) cq->qid);
+    qid=cq->qid;
     bce_free_cq(dev, cq);
-    pr_info("apple-bce: Destroyed CQ, qid=%d\n", cq->qid);
+    pr_info("apple-bce: Destroyed CQ, qid=%d\n", qid);
 }
 
 EXPORT_SYMBOL_GPL(bce_destroy_cq);
