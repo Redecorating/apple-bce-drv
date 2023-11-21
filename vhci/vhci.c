@@ -5,6 +5,7 @@
 #include <linux/usb/hcd.h>
 #include <linux/module.h>
 #include <linux/version.h>
+#include <linux/delay.h>
 
 static dev_t bce_vhci_chrdev;
 static struct class *bce_vhci_class;
@@ -19,6 +20,8 @@ static int bce_vhci_create_message_queues(struct bce_vhci *vhci);
 static void bce_vhci_destroy_message_queues(struct bce_vhci *vhci);
 static void bce_vhci_handle_firmware_events_w(struct work_struct *ws);
 static void bce_vhci_firmware_event_completion(struct bce_queue_sq *sq);
+static int bce_vhci_bus_suspend(struct usb_hcd *hcd);
+static int bce_vhci_bus_resume(struct usb_hcd *hcd);
 
 int bce_vhci_create(struct auxiliary_device *aux_dev, const struct auxiliary_device_id *id)
 {
@@ -73,6 +76,15 @@ int bce_vhci_create(struct auxiliary_device *aux_dev, const struct auxiliary_dev
         goto fail_hcd;
 
     global_vhci = vhci;
+
+    pr_warn("bce_vhci: init finished. Doing test suspend and resume cycle now.\n");
+    msleep(800);
+    status = bce_vhci_bus_suspend(vhci->hcd);
+    pr_warn("bce_vhci: suspended (%d). Waiting three seconds till resume...\n",status);
+    msleep(3000);
+    status = bce_vhci_bus_resume(vhci->hcd);
+    pr_warn("bce_vhci: resume finished (%d).\n", status);
+    msleep(800);
 
     return 0;
 
@@ -390,37 +402,56 @@ static int bce_vhci_bus_resume(struct usb_hcd *hcd)
     int i, j;
     int status;
     struct bce_vhci *vhci = bce_vhci_from_hcd(hcd);
-    pr_info("bce_vhci: resume started\n");
+    pr_notice("bce_vhci: resume started\n");
+    msleep(800);
 
+    // XXX: Does the order of these annoy the t2?
+    pr_info("bce_vhci_event_queue_resume ev_system");
+    msleep(800);
     bce_vhci_event_queue_resume(&vhci->ev_system);
+    pr_info("bce_vhci_event_queue_resume ev_isochronous");
+    msleep(800);
     bce_vhci_event_queue_resume(&vhci->ev_isochronous);
+    pr_info("bce_vhci_event_queue_resume ev_interrupt");
+    msleep(800);
     bce_vhci_event_queue_resume(&vhci->ev_interrupt);
+    pr_info("bce_vhci_event_queue_resume ev_asynchronous");
+    msleep(800);
     bce_vhci_event_queue_resume(&vhci->ev_asynchronous);
+    pr_info("bce_vhci_event_queue_resume ev_commands");
+    msleep(800);
+
     bce_vhci_event_queue_resume(&vhci->ev_commands);
 
-    pr_info("bce_vhci: resume controller\n");
+    pr_notice("bce_vhci: resume controller\n");
+    msleep(800);
     if ((status = bce_vhci_cmd_controller_start(&vhci->cq)))
         return status;
 
-    pr_info("bce_vhci: resume ports\n");
+    pr_notice("bce_vhci: resume ports\n");
+    msleep(800);
     for (i = 0; i < 16; i++) {
         if (!vhci->port_to_device[i])
             continue;
         bce_vhci_cmd_port_resume(&vhci->cq, i);
     }
-    pr_info("bce_vhci: resume endpoints\n");
+    pr_notice("bce_vhci: resume endpoints\n");
+    msleep(800);
     for (i = 0; i < 16; i++) {
         if (!vhci->port_to_device[i])
             continue;
         for (j = 0; j < 32; j++) {
             if (!(vhci->devices[vhci->port_to_device[i]]->tq_mask & BIT(j)))
                 continue;
+            pr_info("bce_vhci_transfer_queue_resume port=%d, tq=%d\n",i,j);
+            msleep(400);
             bce_vhci_transfer_queue_resume(&vhci->devices[vhci->port_to_device[i]]->tq[j],
                     BCE_VHCI_PAUSE_SUSPEND);
         }
     }
 
-    pr_info("bce_vhci: resume done\n");
+    pr_notice("bce_vhci: resume done\n");
+    msleep(800);
     return 0;
 }
 
