@@ -3,6 +3,7 @@
 
 #include "queue.h"
 #include "transfer.h"
+#include <linux/debugfs.h>
 
 struct usb_hcd;
 struct bce_queue_cq;
@@ -46,6 +47,8 @@ struct bce_vhci {
     struct bce_vhci_device *devices[16];
     struct workqueue_struct *tq_state_wq;
     struct work_struct w_fw_events;
+
+    struct dentry *debug_dentry;
 };
 
 #endif //BCE_VHCI_H

@@ -6,6 +6,7 @@
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/delay.h>
+#include <linux/debugfs.h>
 
 static dev_t bce_vhci_chrdev;
 static struct class *bce_vhci_class;
@@ -22,6 +23,22 @@ static void bce_vhci_handle_firmware_events_w(struct work_struct *ws);
 static void bce_vhci_firmware_event_completion(struct bce_queue_sq *sq);
 static int bce_vhci_bus_suspend(struct usb_hcd *hcd);
 static int bce_vhci_bus_resume(struct usb_hcd *hcd);
+
+static ssize_t vhci_finish_resume_write(struct file *file,
+		const char __user *userbuf, size_t count, loff_t *ppos)
+{
+	struct bce_vhci *vhci = file->private_data;
+	int status;
+	status = bce_vhci_bus_resume(vhci->hcd);
+	if (status)
+		return status;
+	return count;
+}
+
+static const struct file_operations vhci_finish_resume_ops = {
+       .open = simple_open,
+       .write = vhci_finish_resume_write,
+};
 
 int bce_vhci_create(struct auxiliary_device *aux_dev, const struct auxiliary_device_id *id)
 {
@@ -77,14 +94,10 @@ int bce_vhci_create(struct auxiliary_device *aux_dev, const struct auxiliary_dev
 
     global_vhci = vhci;
 
-    pr_warn("bce_vhci: init finished. Doing test suspend and resume cycle now.\n");
-    msleep(800);
-    status = bce_vhci_bus_suspend(vhci->hcd);
-    pr_warn("bce_vhci: suspended (%d). Waiting three seconds till resume...\n",status);
-    msleep(3000);
-    status = bce_vhci_bus_resume(vhci->hcd);
-    pr_warn("bce_vhci: resume finished (%d).\n", status);
-    msleep(800);
+    vhci->debug_dentry = debugfs_create_dir(KBUILD_MODNAME, NULL);
+    debugfs_create_file("finish_resume", 0644, vhci->debug_dentry,
+    		    vhci, &vhci_finish_resume_ops);
+
 
     return 0;
 
@@ -104,11 +117,12 @@ fail:
 
 void bce_vhci_destroy(struct auxiliary_device *aux_dev)
 {
-	struct bce_vhci *vhci = auxiliary_get_drvdata(aux_dev);
+    struct bce_vhci *vhci = auxiliary_get_drvdata(aux_dev);
     usb_remove_hcd(vhci->hcd);
     bce_vhci_destroy_event_queues(vhci);
     bce_vhci_destroy_message_queues(vhci);
     device_destroy(bce_vhci_class, vhci->vdevt);
+    debugfs_remove_recursive(vhci->debug_dentry);
 }
 
 struct bce_vhci *bce_vhci_from_hcd(struct usb_hcd *hcd)
@@ -395,6 +409,11 @@ static int bce_vhci_bus_suspend(struct usb_hcd *hcd)
     bce_vhci_event_queue_pause(&vhci->ev_asynchronous);
     pr_info("bce_vhci: suspend done\n");
     return 0;
+}
+
+static int bce_vhci_bus_resume_dummy(struct usb_hcd *hcd)
+{
+	return -EINVAL;
 }
 
 static int bce_vhci_bus_resume(struct usb_hcd *hcd)
@@ -769,7 +788,7 @@ static const struct hc_driver bce_vhci_driver = {
         .check_bandwidth = bce_vhci_check_bandwidth,
         .get_frame_number = bce_vhci_get_frame_number,
         .bus_suspend = bce_vhci_bus_suspend,
-        .bus_resume = bce_vhci_bus_resume
+        .bus_resume = bce_vhci_bus_resume_dummy
 };
 
 static const struct auxiliary_device_id apple_bridge_vhci_ids[] = {
