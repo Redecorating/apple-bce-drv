@@ -97,6 +97,9 @@ static inline int bce_vhci_cmd_port_resume(struct bce_vhci_command_queue *q, bce
     struct bce_vhci_message cmd, res;
     cmd.cmd = BCE_VHCI_CMD_PORT_RESUME;
     cmd.param1 = port;
+    
+    pr_info("bce_vhci_cmd_port_resume port = %d\n", port);
+    msleep(400);
     return bce_vhci_command_queue_execute(q, &cmd, &res, BCE_VHCI_CMD_TIMEOUT_LONG);
 }
 static inline int bce_vhci_cmd_port_suspend(struct bce_vhci_command_queue *q, bce_vhci_port_t port)

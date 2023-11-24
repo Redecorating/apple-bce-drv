@@ -1,7 +1,6 @@
 #include "apple_bce.h"
 #include <linux/module.h>
 #include <linux/crc32.h>
-#include "audio/audio.h"
 #include <linux/version.h>
 
 static dev_t bce_chrdev;
@@ -15,6 +14,8 @@ static irqreturn_t bce_handle_mb_irq(int irq, void *dev);
 static irqreturn_t bce_handle_dma_irq(int irq, void *dev);
 static int bce_fw_version_handshake(struct apple_bce_device *bce);
 static int bce_register_command_queue(struct apple_bce_device *bce, struct bce_queue_memcfg *cfg, int is_sq);
+static int bce_restore_state_and_wake(struct apple_bce_device *bce);
+static int bce_save_state_and_sleep(struct apple_bce_device *bce);
 
 static int apple_bce_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
@@ -102,6 +103,21 @@ static int apple_bce_probe(struct pci_dev *dev, const struct pci_device_id *id)
     global_bce = bce;
 
     bce_vhci_create(bce, &bce->vhci);
+
+    pr_warn("bce_vhci: init finished. Doing test suspend and resume cycle now.\n");
+    msleep(800);
+    status = bce_vhci_bus_suspend(bce->vhci.hcd);
+    pr_warn("bce: suspend finished (%d).\n", status);
+    msleep(800);
+    status = bce_save_state_and_sleep(bce);
+    pr_warn("bce: suspended (%d). Waiting three seconds till resume...\n",status);
+    msleep(3000);
+    status = bce_restore_state_and_wake(bce);
+    pr_warn("bce: resume finished (%d).\n", status);
+    msleep(800);
+    status = bce_vhci_bus_resume(bce->vhci.hcd);
+    pr_warn("bce_vhci: resume finished (%d).\n", status);
+    msleep(800);
 
     return 0;
 
@@ -413,7 +429,6 @@ static int __init apple_bce_module_init(void)
     if (result)
         goto fail_drv;
 
-    aaudio_module_init();
 
     return 0;
 
@@ -431,7 +446,6 @@ static void __exit apple_bce_module_exit(void)
 {
     pci_unregister_driver(&apple_bce_pci_driver);
 
-    aaudio_module_exit();
     bce_vhci_module_exit();
     class_destroy(bce_class);
     unregister_chrdev_region(bce_chrdev, 1);
